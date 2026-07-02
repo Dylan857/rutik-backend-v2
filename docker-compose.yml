@@ -1,0 +1,72 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: rutik-backend
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      API_PREFIX: ${API_PREFIX:-api}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-rutik_db}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: pnpm run start:dev
+    networks:
+      - rutik-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: rutik-postgres
+    restart: unless-stopped
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-rutik_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-rutik_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - rutik-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: rutik-pgadmin
+    restart: unless-stopped
+    ports:
+      - '${PGADMIN_PORT:-5050}:80'
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@rutik.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    depends_on:
+      - postgres
+    networks:
+      - rutik-network
+
+volumes:
+  postgres_data:
+
+networks:
+  rutik-network:
+    driver: bridge

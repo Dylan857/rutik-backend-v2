@@ -1,0 +1,229 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Student } from '../../../students/domain/student.entity';
+import { School } from '../../../school/domain/school.entity';
+import { Vehicle } from '../../../vehicles/domain/vehicle.entity';
+import { SchoolRoute } from '../../../school-routes/domain/school-route.entity';
+import { RouteStatus } from '../../../school-routes/domain/enums/route-status.enum';
+import { StudentPayment } from '../../../student-payments/domain/student-payment.entity';
+import { PaymentStatus } from '../../../student-payments/domain/enums/payment-status.enum';
+import {
+  IDashboardRepository,
+  PaymentAmountTotals,
+  PaymentStatusCounts,
+  RecentPaymentActivityRecord,
+  SummaryCounts,
+  UpcomingPaymentRecord,
+} from '../../domain/interfaces/dashboard.repository';
+
+@Injectable()
+export class DashboardRepositoryImpl implements IDashboardRepository {
+  // Mirrors StudentPaymentsService.deriveComputedFields' priority order
+  // (PAID > PARTIAL > OVERDUE > PENDING). The persisted `status` column can be
+  // stale — there is no cron sweeping PENDING rows into OVERDUE — so every
+  // aggregation here recomputes status live instead of trusting the column,
+  // the same way individual reads already do.
+  private static readonly STATUS_CASE = `
+    CASE
+      WHEN payment.amountPaid >= payment.monthlyFee THEN '${PaymentStatus.PAID}'
+      WHEN payment.amountPaid > 0 THEN '${PaymentStatus.PARTIAL}'
+      WHEN payment.dueDate IS NOT NULL AND payment.dueDate < CURRENT_DATE THEN '${PaymentStatus.OVERDUE}'
+      ELSE '${PaymentStatus.PENDING}'
+    END
+  `;
+
+  constructor(
+    @InjectRepository(Student)
+    private readonly studentRepository: Repository<Student>,
+    @InjectRepository(School)
+    private readonly schoolRepository: Repository<School>,
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepository: Repository<Vehicle>,
+    @InjectRepository(SchoolRoute)
+    private readonly schoolRouteRepository: Repository<SchoolRoute>,
+    @InjectRepository(StudentPayment)
+    private readonly paymentRepository: Repository<StudentPayment>,
+  ) {}
+
+  async getSummaryCounts(companyId: string): Promise<SummaryCounts> {
+    const [students, schools, vehicles, activeRoutes] = await Promise.all([
+      this.studentRepository.count({ where: { companyId } }),
+      this.schoolRepository.count({ where: { companyId } }),
+      this.vehicleRepository.count({ where: { companyId } }),
+      this.schoolRouteRepository.count({
+        where: { companyId, status: RouteStatus.ACTIVE },
+      }),
+    ]);
+
+    return { students, schools, vehicles, activeRoutes };
+  }
+
+  async getPaymentStatusCounts(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+  ): Promise<PaymentStatusCounts> {
+    const rows = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .select(DashboardRepositoryImpl.STATUS_CASE, 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('payment.companyId = :companyId', { companyId })
+      .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
+      .andWhere('payment.billingYear = :billingYear', { billingYear })
+      // Group by the CASE expression itself, not the "status" alias — the
+      // table also has a real (and possibly stale, see STATUS_CASE comment)
+      // `status` column, so `GROUP BY status` resolves to that column instead
+      // of the computed alias and Postgres rejects amountPaid/monthlyFee in
+      // the select list as not functionally dependent on it.
+      .groupBy(DashboardRepositoryImpl.STATUS_CASE)
+      .getRawMany<{ status: PaymentStatus; count: string }>();
+
+    const counts: PaymentStatusCounts = {
+      paid: 0,
+      partial: 0,
+      pending: 0,
+      overdue: 0,
+      totalStudents: 0,
+    };
+
+    for (const row of rows) {
+      const count = parseInt(row.count, 10);
+      counts.totalStudents += count;
+
+      if (row.status === PaymentStatus.PAID) counts.paid = count;
+      else if (row.status === PaymentStatus.PARTIAL) counts.partial = count;
+      else if (row.status === PaymentStatus.OVERDUE) counts.overdue = count;
+      else counts.pending = count;
+    }
+
+    return counts;
+  }
+
+  async getPaymentAmountTotals(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+  ): Promise<PaymentAmountTotals> {
+    const raw = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .select('COALESCE(SUM(payment.monthlyFee), 0)', 'expected')
+      .addSelect('COALESCE(SUM(payment.amountPaid), 0)', 'collected')
+      .where('payment.companyId = :companyId', { companyId })
+      .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
+      .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .getRawOne<{ expected: string; collected: string }>();
+
+    return {
+      expected: parseFloat(raw?.expected ?? '0'),
+      collected: parseFloat(raw?.collected ?? '0'),
+    };
+  }
+
+  async getUpcomingPayments(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+    windowDays: number,
+    limit: number,
+  ): Promise<UpcomingPaymentRecord[]> {
+    const rows = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
+      .innerJoin('student.school', 'school', 'school.deletedAt IS NULL')
+      .innerJoin('student.schedule', 'schedule', 'schedule.deletedAt IS NULL')
+      .select('payment.id', 'id')
+      .addSelect('payment.dueDate', 'dueDate')
+      .addSelect('(payment.monthlyFee - payment.amountPaid)', 'amount')
+      .addSelect('(payment.dueDate - CURRENT_DATE)', 'daysRemaining')
+      .addSelect(DashboardRepositoryImpl.STATUS_CASE, 'status')
+      .addSelect("student.firstName || ' ' || student.lastName", 'studentName')
+      .addSelect('school.name', 'schoolName')
+      .addSelect('schedule.name', 'scheduleName')
+      .where('payment.companyId = :companyId', { companyId })
+      .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
+      .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .andWhere(
+        `(
+          ${DashboardRepositoryImpl.STATUS_CASE} = :overdueStatus
+          OR (
+            ${DashboardRepositoryImpl.STATUS_CASE} IN (:...duePendingStatuses)
+            AND payment.dueDate <= CURRENT_DATE + (:windowDays)::integer
+          )
+        )`,
+        {
+          overdueStatus: PaymentStatus.OVERDUE,
+          duePendingStatuses: [PaymentStatus.PENDING, PaymentStatus.PARTIAL],
+          windowDays,
+        },
+      )
+      // Priority bucket first (OVERDUE = 0, everything else = 1), then by due
+      // date ascending — oldest-overdue-first within the OVERDUE bucket and
+      // soonest-due-first within the pending/partial bucket.
+      .orderBy(
+        `CASE WHEN ${DashboardRepositoryImpl.STATUS_CASE} = '${PaymentStatus.OVERDUE}' THEN 0 ELSE 1 END`,
+        'ASC',
+      )
+      .addOrderBy('payment.dueDate', 'ASC')
+      .limit(limit)
+      .getRawMany<{
+        id: string;
+        dueDate: string;
+        amount: string;
+        daysRemaining: string;
+        status: PaymentStatus;
+        studentName: string;
+        schoolName: string;
+        scheduleName: string;
+      }>();
+
+    return rows.map((row) => ({
+      id: row.id,
+      studentName: row.studentName,
+      schoolName: row.schoolName,
+      scheduleName: row.scheduleName,
+      amount: parseFloat(row.amount),
+      dueDate: row.dueDate,
+      daysRemaining: parseInt(row.daysRemaining, 10),
+      status: row.status,
+    }));
+  }
+
+  async getRecentPaymentActivity(
+    companyId: string,
+    limit: number,
+  ): Promise<RecentPaymentActivityRecord[]> {
+    const rows = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
+      .innerJoin('student.school', 'school', 'school.deletedAt IS NULL')
+      .select('payment.id', 'id')
+      .addSelect('payment.amountPaid', 'amount')
+      .addSelect('payment.paymentMethod', 'paymentMethod')
+      .addSelect('payment.paidAt', 'paidAt')
+      .addSelect("student.firstName || ' ' || student.lastName", 'studentName')
+      .addSelect('school.name', 'schoolName')
+      .where('payment.companyId = :companyId', { companyId })
+      .andWhere('payment.amountPaid > 0')
+      .andWhere('payment.paidAt IS NOT NULL')
+      .orderBy('payment.paidAt', 'DESC')
+      .limit(limit)
+      .getRawMany<{
+        id: string;
+        amount: string;
+        paymentMethod: RecentPaymentActivityRecord['paymentMethod'];
+        paidAt: Date;
+        studentName: string;
+        schoolName: string;
+      }>();
+
+    return rows.map((row) => ({
+      id: row.id,
+      studentName: row.studentName,
+      schoolName: row.schoolName,
+      amount: parseFloat(row.amount),
+      paymentMethod: row.paymentMethod,
+      paidAt: row.paidAt,
+    }));
+  }
+}
