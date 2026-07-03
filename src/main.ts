@@ -27,7 +27,7 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalInterceptors(new TransformInterceptor());
 
-  app.enableCors();
+  app.enableCors({ origin: configService.get<string[]>('app.corsOrigin') });
 
   setupSwagger(app, apiPrefix);
 

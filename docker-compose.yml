@@ -12,6 +12,7 @@ services:
       NODE_ENV: development
       PORT: 3000
       API_PREFIX: ${API_PREFIX:-api}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:4200}
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-postgres}
