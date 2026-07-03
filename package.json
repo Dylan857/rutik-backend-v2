@@ -22,7 +22,9 @@
     "migration:generate": "pnpm typeorm migration:generate -d src/shared/database/data-source.ts",
     "migration:run": "pnpm typeorm migration:run -d src/shared/database/data-source.ts",
     "migration:revert": "pnpm typeorm migration:revert -d src/shared/database/data-source.ts",
-    "migration:run:prod": "typeorm migration:run -d dist/shared/database/data-source.js"
+    "migration:run:prod": "typeorm migration:run -d dist/shared/database/data-source.js",
+    "seed:super-admin": "ts-node src/database/seeds/super-admin.seed.ts",
+    "seed:super-admin:prod": "node dist/database/seeds/super-admin.seed.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
