@@ -1,0 +1,74 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: rutik-backend:latest
+    container_name: rutik-backend
+    restart: always
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PREFIX: ${API_PREFIX:-api}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - rutik-network
+
+  # Self-hosted Postgres for a single-instance deploy (droplet/EC2).
+  # Point DB_HOST/DB_PORT at a managed database (RDS, DigitalOcean Managed DB)
+  # instead and drop this service once you migrate off it.
+  postgres:
+    image: postgres:16-alpine
+    container_name: rutik-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME} -d ${DB_NAME}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - rutik-network
+
+  # Optional: only started with `docker compose --profile tools up`.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: rutik-pgadmin
+    restart: always
+    profiles: [tools]
+    ports:
+      - '${PGADMIN_PORT:-5050}:80'
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    depends_on:
+      - postgres
+    networks:
+      - rutik-network
+
+volumes:
+  postgres_data:
+
+networks:
+  rutik-network:
+    driver: bridge

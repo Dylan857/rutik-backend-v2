@@ -21,7 +21,8 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "pnpm typeorm migration:generate -d src/shared/database/data-source.ts",
     "migration:run": "pnpm typeorm migration:run -d src/shared/database/data-source.ts",
-    "migration:revert": "pnpm typeorm migration:revert -d src/shared/database/data-source.ts"
+    "migration:revert": "pnpm typeorm migration:revert -d src/shared/database/data-source.ts",
+    "migration:run:prod": "typeorm migration:run -d dist/shared/database/data-source.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
