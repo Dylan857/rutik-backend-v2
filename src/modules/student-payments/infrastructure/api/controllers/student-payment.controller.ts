@@ -51,12 +51,17 @@ export class StudentPaymentController {
   @ApiOperation({
     summary: 'Generate the next billing cycle for every active company',
     description:
-      'Opens the NEXT calendar month\'s billing period for every company with ' +
-      "status ACTIVE — running this on any day of June opens July, never June. " +
-      'For each company, creates a PENDING student_payments record for every ' +
-      'active student whose transport service covers that period and who does ' +
-      'not already have one. Safe to run more than once for the same period: ' +
-      'students already billed are skipped, never duplicated.',
+      'Opens the next billing period for every company with status ACTIVE. ' +
+      'The period is resolved per company: a company with no billing history ' +
+      '(brand new, or one that was never billed) opens the CURRENT month ' +
+      'first — it is never skipped straight to next month. Companies that ' +
+      'already have history advance one month from their own last billed ' +
+      'period, capped at "now + 1" (running this on any day of June opens ' +
+      'July at most). For each company, creates a PENDING student_payments ' +
+      'record for every active student whose transport service covers that ' +
+      'period and who does not already have one. Safe to run more than once: ' +
+      'a company already at the ceiling is reported as upToDate and nothing ' +
+      'is created for it; students already billed are skipped, never duplicated.',
   })
   @ApiOkResponse({ type: GenerateBillingCycleResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })

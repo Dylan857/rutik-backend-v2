@@ -26,6 +26,12 @@ export interface IStudentPaymentRepository {
     billingMonth: number,
     billingYear: number,
   ): Promise<StudentPayment[]>;
+  // Most recent billing period the company has ever been billed for, or null
+  // if it has no payment history at all. Used by generateNextBillingCycle to
+  // decide, per company, which period to open next (see resolveBillingPeriodForCompany).
+  findLatestPeriodByCompany(
+    companyId: string,
+  ): Promise<{ billingMonth: number; billingYear: number } | null>;
   update(id: string, data: Partial<StudentPayment>): Promise<StudentPayment>;
   softDelete(id: string): Promise<void>;
 }

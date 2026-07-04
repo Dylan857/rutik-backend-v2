@@ -11,7 +11,10 @@ export class RevenueSummaryDto {
 
   @ApiProperty({
     example: 14350000,
-    description: 'Total amount collected for the current billing period',
+    description:
+      'Total amount collected. Reflects the current billing period by ' +
+      'default, or the billingMonth/billingYear query params when provided ' +
+      '— the only value in the dashboard affected by that filter.',
   })
   @Expose()
   collected: number;

@@ -75,6 +75,18 @@ export class StudentPaymentRepositoryImpl implements IStudentPaymentRepository {
     });
   }
 
+  async findLatestPeriodByCompany(
+    companyId: string,
+  ): Promise<{ billingMonth: number; billingYear: number } | null> {
+    const latest = await this.repository.findOne({
+      where: { companyId },
+      order: { billingYear: 'DESC', billingMonth: 'DESC' },
+    });
+    return latest
+      ? { billingMonth: latest.billingMonth, billingYear: latest.billingYear }
+      : null;
+  }
+
   async update(
     id: string,
     data: Partial<StudentPayment>,
