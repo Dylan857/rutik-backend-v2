@@ -11,6 +11,24 @@ export class BillingCycleCompanyResultDto {
   companyName: string;
 
   @ApiProperty({
+    example: 7,
+    nullable: true,
+    description:
+      'Billing month (1-12) opened for this company in this run, or null if upToDate',
+  })
+  @Expose()
+  billingMonth: number | null;
+
+  @ApiProperty({
+    example: 2026,
+    nullable: true,
+    description:
+      'Billing year opened for this company in this run, or null if upToDate',
+  })
+  @Expose()
+  billingYear: number | null;
+
+  @ApiProperty({
     example: 42,
     description: 'PENDING payment records created for this company',
   })
@@ -25,16 +43,34 @@ export class BillingCycleCompanyResultDto {
   })
   @Expose()
   skipped: number;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'True when this company had already reached the reference period and ' +
+      'nothing was opened for it in this run',
+  })
+  @Expose()
+  upToDate: boolean;
 }
 
 export class GenerateBillingCycleResponseDto {
-  @ApiProperty({ example: 7, description: 'Billing month opened (1-12)' })
+  @ApiProperty({
+    example: 8,
+    description:
+      'Reference ceiling for this run ("now + 1"). Companies with billing ' +
+      'history are brought up to this period; companies without history may ' +
+      'open an earlier period first — see billingMonth/billingYear per company in `results`.',
+  })
   @Expose()
-  billingMonth: number;
+  referenceMonth: number;
 
-  @ApiProperty({ example: 2026, description: 'Billing year opened' })
+  @ApiProperty({
+    example: 2026,
+    description: 'Reference ceiling year for this run',
+  })
   @Expose()
-  billingYear: number;
+  referenceYear: number;
 
   @ApiProperty({ example: 12 })
   @Expose()

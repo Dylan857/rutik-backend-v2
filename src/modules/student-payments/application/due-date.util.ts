@@ -33,3 +33,50 @@ export function getNextBillingPeriod(referenceDate: Date = new Date()): {
     ? { billingMonth: 1, billingYear: currentYear + 1 }
     : { billingMonth: currentMonth + 1, billingYear: currentYear };
 }
+
+function addOneMonth(period: { billingMonth: number; billingYear: number }): {
+  billingMonth: number;
+  billingYear: number;
+} {
+  return period.billingMonth === 12
+    ? { billingMonth: 1, billingYear: period.billingYear + 1 }
+    : {
+        billingMonth: period.billingMonth + 1,
+        billingYear: period.billingYear,
+      };
+}
+
+/**
+ * Per-company billing period to open next. Unlike getNextBillingPeriod
+ * (which is a pure "now + 1" wall-clock rule), this looks at the company's
+ * own billing history so a company that has never been billed doesn't get
+ * skipped straight to "now + 1":
+ *  - No prior period at all (brand new company, or one that never had the
+ *    cycle run for it) -> opens the CURRENT month first, same as any other
+ *    company would have had it opened by now if the cycle had run on time.
+ *  - Has a prior period -> advances exactly one month from it.
+ * Either way the result is capped at getNextBillingPeriod (the ceiling
+ * every other company is held to), so a company can never end up billed
+ * further ahead than the rest in a single run. Once a company's last period
+ * reaches that ceiling, this returns null: nothing left to open this run.
+ */
+export function resolveBillingPeriodForCompany(
+  lastBilled: { billingMonth: number; billingYear: number } | null,
+  referenceDate: Date = new Date(),
+): { billingMonth: number; billingYear: number } | null {
+  const ceiling = getNextBillingPeriod(referenceDate);
+
+  const candidate = lastBilled
+    ? addOneMonth(lastBilled)
+    : {
+        billingMonth: referenceDate.getMonth() + 1,
+        billingYear: referenceDate.getFullYear(),
+      };
+
+  const isAfterCeiling =
+    candidate.billingYear > ceiling.billingYear ||
+    (candidate.billingYear === ceiling.billingYear &&
+      candidate.billingMonth > ceiling.billingMonth);
+
+  return isAfterCeiling ? null : candidate;
+}

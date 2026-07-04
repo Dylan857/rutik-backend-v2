@@ -18,7 +18,11 @@ import {
 } from '../domain/interfaces/student-payment.repository';
 import { CreateStudentPaymentDto } from '../infrastructure/api/dto/create-student-payment.dto';
 import { UpdateStudentPaymentDto } from '../infrastructure/api/dto/update-student-payment.dto';
-import { computeDueDate, getNextBillingPeriod } from './due-date.util';
+import {
+  computeDueDate,
+  getNextBillingPeriod,
+  resolveBillingPeriodForCompany,
+} from './due-date.util';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -32,13 +36,24 @@ interface ComputedFields {
 export interface BillingCycleCompanyResult {
   companyId: string;
   companyName: string;
+  // Period actually opened for this company in this run, or null when the
+  // company was already up to date (see upToDate).
+  billingMonth: number | null;
+  billingYear: number | null;
   created: number;
   skipped: number;
+  // True when the company had already reached the reference ceiling and
+  // nothing was opened for it in this run.
+  upToDate: boolean;
 }
 
 export interface BillingCycleSummary {
-  billingMonth: number;
-  billingYear: number;
+  // The "now + 1" ceiling used as reference for this run (see
+  // getNextBillingPeriod). Companies with billing history reach exactly this
+  // period; companies without history may open an earlier period first —
+  // see each entry in `results` for the period actually opened.
+  referenceMonth: number;
+  referenceYear: number;
   companiesProcessed: number;
   totalCreated: number;
   totalSkipped: number;
@@ -170,16 +185,27 @@ export class StudentPaymentsService {
   }
 
   /**
-   * Opens the next billing cycle (the calendar month after "now", see
-   * getNextBillingPeriod) for every ACTIVE company, generating PENDING
-   * student_payments records via generateMonthlyPayments below.
+   * Opens the next billing period for every ACTIVE company, generating
+   * PENDING student_payments records via generateMonthlyPayments below.
+   *
+   * The period opened is resolved per company (resolveBillingPeriodForCompany),
+   * not from a single global "now + 1": a company with no billing history yet
+   * (a brand new one, or one that was never run) opens the CURRENT month
+   * first instead of jumping straight to next month, so it doesn't skip the
+   * period it should have been billed for. Companies with history advance one
+   * month from their own last billed period, capped at the same "now + 1"
+   * ceiling every company is held to.
    *
    * Manually triggered by a super_admin via REST (POST /student-payments/billing-cycle/generate)
-   * — there is deliberately no cron. Safe to run more than once for the same
-   * period: generateMonthlyPayments skips students that already have a record.
+   * — there is deliberately no cron. Safe to run more than once: a company
+   * already at the ceiling is reported as upToDate and nothing is created for
+   * it; a company still catching up may open one additional period per call
+   * until it reaches the ceiling.
    */
   async generateNextBillingCycle(): Promise<BillingCycleSummary> {
-    const { billingMonth, billingYear } = getNextBillingPeriod();
+    const referenceDate = new Date();
+    const { billingMonth: referenceMonth, billingYear: referenceYear } =
+      getNextBillingPeriod(referenceDate);
 
     const companies = await this.companyService.findAll();
     const activeCompanies = companies.filter(
@@ -191,24 +217,45 @@ export class StudentPaymentsService {
     let totalSkipped = 0;
 
     for (const company of activeCompanies) {
+      const lastBilled = await this.paymentRepository.findLatestPeriodByCompany(
+        company.id,
+      );
+      const period = resolveBillingPeriodForCompany(lastBilled, referenceDate);
+
+      if (!period) {
+        results.push({
+          companyId: company.id,
+          companyName: company.name,
+          billingMonth: null,
+          billingYear: null,
+          created: 0,
+          skipped: 0,
+          upToDate: true,
+        });
+        continue;
+      }
+
       const { created, skipped } = await this.generateMonthlyPayments(
         company.id,
-        billingMonth,
-        billingYear,
+        period.billingMonth,
+        period.billingYear,
       );
       results.push({
         companyId: company.id,
         companyName: company.name,
+        billingMonth: period.billingMonth,
+        billingYear: period.billingYear,
         created,
         skipped,
+        upToDate: false,
       });
       totalCreated += created;
       totalSkipped += skipped;
     }
 
     return {
-      billingMonth,
-      billingYear,
+      referenceMonth,
+      referenceYear,
       companiesProcessed: activeCompanies.length,
       totalCreated,
       totalSkipped,
