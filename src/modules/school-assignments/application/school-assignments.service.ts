@@ -72,19 +72,10 @@ export class SchoolAssignmentsService {
     // ── 4. Uniqueness: one active assignment per school + schedule ────────────
     await this.assertNoActiveAssignmentForSlot(dto.schoolId, dto.scheduleId);
 
-    // ── 5. Uniqueness: driver cannot have overlapping time window ─────────────
-    await this.assertDriverFreeInTimeWindow(
-      dto.driverId,
-      schedule.startTime,
-      schedule.endTime,
-    );
-
-    // ── 6. Uniqueness: vehicle cannot have overlapping time window ─────────────
-    await this.assertVehicleFreeInTimeWindow(
-      dto.vehicleId,
-      schedule.startTime,
-      schedule.endTime,
-    );
+    // Driver/vehicle time-overlap validation was intentionally removed: the
+    // school schedule window is not the driver's real occupied time, so it
+    // rejected valid cases (e.g. finishing a route early and covering another
+    // school in the gap). Reintroduce once real route duration is tracked.
 
     const assignment = await this.assignmentRepository.create({
       companyId: dto.companyId,
@@ -116,16 +107,6 @@ export class SchoolAssignmentsService {
   ): Promise<AssignmentSummary> {
     const current = await this.findRawById(id);
 
-    const needsTimeCheck =
-      (dto.driverId && dto.driverId !== current.driverId) ||
-      (dto.vehicleId && dto.vehicleId !== current.vehicleId) ||
-      (dto.status === AssignmentStatus.ACTIVE &&
-        current.status === AssignmentStatus.INACTIVE);
-
-    const currentSchedule = needsTimeCheck
-      ? await this.scheduleService.findById(current.scheduleId)
-      : null;
-
     // ── Validate new driver if it changes ─────────────────────────────────────
     if (dto.driverId && dto.driverId !== current.driverId) {
       const driver = await this.driverService.findById(dto.driverId);
@@ -133,12 +114,6 @@ export class SchoolAssignmentsService {
         'Driver',
         driver.companyId,
         current.companyId,
-      );
-      await this.assertDriverFreeInTimeWindow(
-        dto.driverId,
-        currentSchedule!.startTime,
-        currentSchedule!.endTime,
-        id,
       );
     }
 
@@ -150,12 +125,6 @@ export class SchoolAssignmentsService {
         vehicle.companyId,
         current.companyId,
       );
-      await this.assertVehicleFreeInTimeWindow(
-        dto.vehicleId,
-        currentSchedule!.startTime,
-        currentSchedule!.endTime,
-        id,
-      );
     }
 
     // ── If reactivating, re-check slot uniqueness ─────────────────────────────
@@ -166,18 +135,6 @@ export class SchoolAssignmentsService {
       await this.assertNoActiveAssignmentForSlot(
         current.schoolId,
         current.scheduleId,
-        id,
-      );
-      await this.assertDriverFreeInTimeWindow(
-        dto.driverId ?? current.driverId,
-        currentSchedule!.startTime,
-        currentSchedule!.endTime,
-        id,
-      );
-      await this.assertVehicleFreeInTimeWindow(
-        dto.vehicleId ?? current.vehicleId,
-        currentSchedule!.startTime,
-        currentSchedule!.endTime,
         id,
       );
     }
@@ -267,46 +224,6 @@ export class SchoolAssignmentsService {
     if (conflict) {
       throw new ConflictException(
         `There is already an active assignment for school "${schoolId}" in schedule "${scheduleId}"`,
-      );
-    }
-  }
-
-  private async assertDriverFreeInTimeWindow(
-    driverId: string,
-    startTime: string,
-    endTime: string,
-    excludeId?: string,
-  ): Promise<void> {
-    const conflict =
-      await this.assignmentRepository.findActiveByDriverInTimeWindow(
-        driverId,
-        startTime,
-        endTime,
-        excludeId,
-      );
-    if (conflict) {
-      throw new ConflictException(
-        `Driver with ID "${driverId}" already has an active assignment during ${startTime}–${endTime}`,
-      );
-    }
-  }
-
-  private async assertVehicleFreeInTimeWindow(
-    vehicleId: string,
-    startTime: string,
-    endTime: string,
-    excludeId?: string,
-  ): Promise<void> {
-    const conflict =
-      await this.assignmentRepository.findActiveByVehicleInTimeWindow(
-        vehicleId,
-        startTime,
-        endTime,
-        excludeId,
-      );
-    if (conflict) {
-      throw new ConflictException(
-        `Vehicle with ID "${vehicleId}" already has an active assignment during ${startTime}–${endTime}`,
       );
     }
   }

@@ -53,58 +53,6 @@ export class SchoolAssignmentRepositoryImpl implements ISchoolAssignmentReposito
     return records.find((a) => a.id !== excludeId) ?? null;
   }
 
-  async findActiveByDriverInTimeWindow(
-    driverId: string,
-    startTime: string,
-    endTime: string,
-    excludeId?: string,
-  ): Promise<SchoolAssignment | null> {
-    const qb = this.repository
-      .createQueryBuilder('a')
-      .innerJoin(
-        'school_schedules',
-        's',
-        'a.schedule_id = s.id AND s.deleted_at IS NULL',
-      )
-      .where('a.driver_id = :driverId', { driverId })
-      .andWhere('a.status = :status', { status: AssignmentStatus.ACTIVE })
-      .andWhere('a.deleted_at IS NULL')
-      .andWhere('s.start_time < :endTime', { endTime })
-      .andWhere('s.end_time > :startTime', { startTime });
-
-    if (excludeId) {
-      qb.andWhere('a.id != :excludeId', { excludeId });
-    }
-
-    return qb.getOne();
-  }
-
-  async findActiveByVehicleInTimeWindow(
-    vehicleId: string,
-    startTime: string,
-    endTime: string,
-    excludeId?: string,
-  ): Promise<SchoolAssignment | null> {
-    const qb = this.repository
-      .createQueryBuilder('a')
-      .innerJoin(
-        'school_schedules',
-        's',
-        'a.schedule_id = s.id AND s.deleted_at IS NULL',
-      )
-      .where('a.vehicle_id = :vehicleId', { vehicleId })
-      .andWhere('a.status = :status', { status: AssignmentStatus.ACTIVE })
-      .andWhere('a.deleted_at IS NULL')
-      .andWhere('s.start_time < :endTime', { endTime })
-      .andWhere('s.end_time > :startTime', { startTime });
-
-    if (excludeId) {
-      qb.andWhere('a.id != :excludeId', { excludeId });
-    }
-
-    return qb.getOne();
-  }
-
   async update(
     id: string,
     data: Partial<SchoolAssignment>,
