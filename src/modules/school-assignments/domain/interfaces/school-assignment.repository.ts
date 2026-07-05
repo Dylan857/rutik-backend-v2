@@ -15,22 +15,10 @@ export interface ISchoolAssignmentRepository {
   findAll(filters: AssignmentFilters): Promise<SchoolAssignment[]>;
   findById(id: string): Promise<SchoolAssignment | null>;
 
-  // Uniqueness guards — each returns the conflicting active record (if any)
+  // Uniqueness guard — returns the conflicting active record (if any)
   findActiveBySchoolAndSchedule(
     schoolId: string,
     scheduleId: string,
-    excludeId?: string,
-  ): Promise<SchoolAssignment | null>;
-  findActiveByDriverInTimeWindow(
-    driverId: string,
-    startTime: string,
-    endTime: string,
-    excludeId?: string,
-  ): Promise<SchoolAssignment | null>;
-  findActiveByVehicleInTimeWindow(
-    vehicleId: string,
-    startTime: string,
-    endTime: string,
     excludeId?: string,
   ): Promise<SchoolAssignment | null>;
 
