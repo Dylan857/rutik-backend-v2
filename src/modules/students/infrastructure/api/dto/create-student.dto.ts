@@ -16,6 +16,7 @@ import {
   Min,
 } from 'class-validator';
 import { StudentStatus } from '../../../domain/enums/student-status.enum';
+import { TripType } from '../../../domain/enums/trip-type.enum';
 
 export class CreateStudentDto {
   @ApiProperty({
@@ -153,6 +154,18 @@ export class CreateStudentDto {
   @IsEnum(StudentStatus)
   @IsOptional()
   status?: StudentStatus;
+
+  @ApiPropertyOptional({
+    enum: TripType,
+    default: TripType.ROUND_TRIP,
+    description:
+      'Which leg(s) of the route this student needs. ROUND_TRIP (default) ' +
+      'needs both; PICKUP_ONLY only needs the morning ride to school; ' +
+      'DROPOFF_ONLY only needs the afternoon ride home.',
+  })
+  @IsEnum(TripType)
+  @IsOptional()
+  tripType?: TripType;
 
   @ApiPropertyOptional({ example: 'Student requires special assistance.' })
   @IsString()

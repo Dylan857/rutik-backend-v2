@@ -22,10 +22,24 @@ export class RouteStopResponseDto {
 
   @ApiProperty({
     example: 3,
-    description: 'Pick-up order within the route (1-based, ascending)',
+    description:
+      'Pickup (ida) order within the route (1-based, ascending). ' +
+      'Null if the student\'s tripType is DROPOFF_ONLY.',
+    nullable: true,
   })
   @Expose()
-  stopOrder: number;
+  stopOrder: number | null;
+
+  @ApiProperty({
+    example: 2,
+    description:
+      'Dropoff (regreso) order within the route (1-based, ascending), ' +
+      'computed independently from stopOrder. Null if the student\'s ' +
+      'tripType is PICKUP_ONLY.',
+    nullable: true,
+  })
+  @Expose()
+  stopOrderReturn: number | null;
 
   @ApiProperty({
     example: 4.710989,

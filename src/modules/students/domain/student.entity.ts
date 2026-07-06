@@ -4,6 +4,7 @@ import { Company } from '../../company/domain/company.entity';
 import { School } from '../../school/domain/school.entity';
 import { SchoolSchedule } from '../../school-schedules/domain/school-schedule.entity';
 import { StudentStatus } from './enums/student-status.enum';
+import { TripType } from './enums/trip-type.enum';
 
 @Entity('students')
 export class Student extends BaseEntity {
@@ -108,6 +109,17 @@ export class Student extends BaseEntity {
 
   @Column({ type: 'enum', enum: StudentStatus, default: StudentStatus.ACTIVE })
   status: StudentStatus;
+
+  // Which leg(s) of the route this student needs — most are ROUND_TRIP.
+  // Determines which of the route's two independently-computed Directions
+  // orders (pickup / dropoff) this student's stop participates in.
+  @Column({
+    name: 'trip_type',
+    type: 'enum',
+    enum: TripType,
+    default: TripType.ROUND_TRIP,
+  })
+  tripType: TripType;
 
   @Column({ type: 'text', nullable: true, default: null })
   observations: string | null;

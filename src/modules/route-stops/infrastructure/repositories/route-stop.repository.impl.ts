@@ -5,6 +5,7 @@ import { RouteStop } from '../../domain/route-stop.entity';
 import {
   IRouteStopRepository,
   RouteStopFilters,
+  RouteStopOrderUpdate,
 } from '../../domain/interfaces/route-stop.repository';
 
 @Injectable()
@@ -23,7 +24,11 @@ export class RouteStopRepositoryImpl implements IRouteStopRepository {
     const where: Record<string, unknown> = {};
     if (filters.schoolRouteId) where.schoolRouteId = filters.schoolRouteId;
     if (filters.studentId) where.studentId = filters.studentId;
-    return this.repository.find({ where, order: { stopOrder: 'ASC' } });
+    return this.repository.find({
+      where,
+      relations: { student: true },
+      order: { stopOrder: 'ASC' },
+    });
   }
 
   async findById(id: string): Promise<RouteStop | null> {
@@ -43,8 +48,8 @@ export class RouteStopRepositoryImpl implements IRouteStopRepository {
     });
   }
 
-  async updateOrder(id: string, stopOrder: number): Promise<void> {
-    await this.repository.update(id, { stopOrder });
+  async updateOrder(id: string, order: RouteStopOrderUpdate): Promise<void> {
+    await this.repository.update(id, order);
   }
 
   async delete(id: string): Promise<void> {

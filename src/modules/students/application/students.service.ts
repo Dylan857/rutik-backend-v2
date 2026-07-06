@@ -85,6 +85,12 @@ export class StudentService {
     const scheduleChanged =
       dto.scheduleId !== undefined && dto.scheduleId !== current.scheduleId;
 
+    // tripType doesn't move the student to a different route — it only
+    // changes which leg(s) their existing stop participates in — so it's
+    // handled separately from the full remove/re-add that scheduleId needs.
+    const tripTypeChanged =
+      dto.tripType !== undefined && dto.tripType !== current.tripType;
+
     if (scheduleChanged) {
       await this.routeStopsService.removeStudentFromRoute(id);
     }
@@ -93,6 +99,8 @@ export class StudentService {
 
     if (scheduleChanged) {
       await this.routeStopsService.addStudentToRoute(updated);
+    } else if (tripTypeChanged) {
+      await this.routeStopsService.refreshRouteForStudent(id);
     }
 
     return updated;

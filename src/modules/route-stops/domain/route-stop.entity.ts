@@ -43,8 +43,16 @@ export class RouteStop {
   @JoinColumn({ name: 'student_id' })
   student: Student;
 
-  @Column({ name: 'stop_order', type: 'int' })
-  stopOrder: number;
+  // Pickup (ida) order — null if the student's tripType is DROPOFF_ONLY,
+  // since they don't participate in that leg.
+  @Column({ name: 'stop_order', type: 'int', nullable: true })
+  stopOrder: number | null;
+
+  // Return (regreso) order — null if the student's tripType is PICKUP_ONLY.
+  // Computed independently from stopOrder: the two legs can have different
+  // stop sets (mixed trip types), so this is never just stopOrder reversed.
+  @Column({ name: 'stop_order_return', type: 'int', nullable: true })
+  stopOrderReturn: number | null;
 
   // Snapshot of the student's location at the moment the stop was created.
   // Decoupled from the Student entity so that address corrections do not
