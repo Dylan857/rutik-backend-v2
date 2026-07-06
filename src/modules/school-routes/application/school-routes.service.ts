@@ -44,14 +44,16 @@ export class SchoolRoutesService {
 
   // Called by RouteStopsService after a successful Google Directions call —
   // persists the cached polyline/distance/duration so it isn't refetched on
-  // every route read, only when the stop set actually changes.
+  // every route read, only when the stop set actually changes. Pickup and
+  // return fields are all optional and independent: mixed trip types mean
+  // either leg can have zero stops (or fail) while the other succeeds.
   async updateDirectionsCache(
     id: string,
     data: {
-      polyline: string;
-      distanceMeters: number;
-      durationSeconds: number;
       directionsUpdatedAt: Date;
+      polyline?: string;
+      distanceMeters?: number;
+      durationSeconds?: number;
       polylineReturn?: string;
       distanceMetersReturn?: number;
       durationSecondsReturn?: number;

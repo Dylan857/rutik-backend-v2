@@ -47,14 +47,11 @@ export class GoogleDirectionsService {
     origin: LatLng,
     destination: LatLng,
     waypoints: LatLng[],
-    optimize = true,
   ): Promise<DirectionsResult> {
     const apiKey = this.configService.get<string>('googleMaps.apiKey');
 
     const waypointsParam = waypoints.length
-      ? `${optimize ? 'optimize:true|' : ''}${waypoints
-          .map((w) => `${w.lat},${w.lng}`)
-          .join('|')}`
+      ? `optimize:true|${waypoints.map((w) => `${w.lat},${w.lng}`).join('|')}`
       : undefined;
 
     const { data } = await firstValueFrom(

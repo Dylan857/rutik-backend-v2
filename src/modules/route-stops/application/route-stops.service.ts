@@ -13,19 +13,34 @@ import { SchoolRoutesService } from '../../school-routes/application/school-rout
 import { SchoolService } from '../../school/application/school.service';
 import { CompanyService } from '../../company/application/company.service';
 import { Student } from '../../students/domain/student.entity';
+import { TripType } from '../../students/domain/enums/trip-type.enum';
 import { RouteStop } from '../domain/route-stop.entity';
 import {
   IRouteStopRepository,
   RouteStopFilters,
   ROUTE_STOP_REPOSITORY,
 } from '../domain/interfaces/route-stop.repository';
-import { GoogleDirectionsService } from '../infrastructure/external/google-directions.service';
+import {
+  GoogleDirectionsService,
+  LatLng,
+} from '../infrastructure/external/google-directions.service';
 
 // Google Directions caps waypoints per request at 25 total (origin +
-// destination + up to 23 intermediate stops). The company is the fixed
-// origin and every stop is a waypoint, so routes with more than 23 stops
-// can't fit and fall back to nearest-neighbor entirely.
+// destination + up to 23 intermediate stops). Each leg (pickup/dropoff) is
+// its own request with the company/school as fixed endpoints and its own
+// filtered stop set as waypoints, so the limit applies per leg.
 const MAX_STOPS_FOR_DIRECTIONS = 23;
+
+interface LegDirectionsResult {
+  polyline: string;
+  distanceMeters: number;
+  durationSeconds: number;
+}
+
+interface LegComputation {
+  order: RouteStop[];
+  directions: LegDirectionsResult | null;
+}
 
 @Injectable()
 export class RouteStopsService {
@@ -131,6 +146,22 @@ export class RouteStopsService {
     this.logger.log(`Student ${student.id} added to route ${route.id}`);
   }
 
+  // Called when a student's tripType changes but their school/schedule
+  // didn't — the student stays on the same route, only which leg(s) their
+  // stop participates in changes, so there's no need to remove/re-add it.
+  async refreshRouteForStudent(studentId: string): Promise<void> {
+    const stop = await this.routeStopRepository.findByStudentId(studentId);
+
+    if (!stop) {
+      this.logger.warn(
+        `refreshRouteForStudent: student ${studentId} has no active route stop`,
+      );
+      return;
+    }
+
+    await this.recalculateRouteOrder(stop.schoolRouteId);
+  }
+
   async removeStudentFromRoute(studentId: string): Promise<void> {
     const stop = await this.routeStopRepository.findByStudentId(studentId);
 
@@ -156,41 +187,49 @@ export class RouteStopsService {
 
     if (stops.length === 0) return;
 
-    const ordered = await this.computeStopOrder(routeId, stops);
+    const { pickupOrder, dropoffOrder } = await this.computeStopOrders(
+      routeId,
+      stops,
+    );
 
-    for (let i = 0; i < ordered.length; i++) {
-      await this.routeStopRepository.updateOrder(ordered[i].id, i + 1);
+    const pickupIndex = new Map(
+      pickupOrder.map((stop, i) => [stop.id, i + 1]),
+    );
+    const dropoffIndex = new Map(
+      dropoffOrder.map((stop, i) => [stop.id, i + 1]),
+    );
+
+    for (const stop of stops) {
+      await this.routeStopRepository.updateOrder(stop.id, {
+        stopOrder: pickupIndex.get(stop.id) ?? null,
+        stopOrderReturn: dropoffIndex.get(stop.id) ?? null,
+      });
     }
 
     this.logger.log(
-      `Route ${routeId}: recalculated order for ${ordered.length} stops`,
+      `Route ${routeId}: recalculated order for ${pickupOrder.length} pickup / ${dropoffOrder.length} dropoff stops`,
     );
   }
 
   // ── Private algorithm ────────────────────────────────────────────────────────
 
-  // Directions-first: uses Google Directions' optimizeWaypoints to order stops
-  // toward a fixed destination (the school), falling back to the local
-  // nearest-neighbor heuristic whenever Directions can't be used or fails.
-  private async computeStopOrder(
+  // Splits stops into a pickup leg (company -> school) and a dropoff leg
+  // (school -> company), each restricted to the students whose tripType
+  // includes that leg, and orders each independently via Google Directions
+  // — mixed trip types mean the two legs can have different stop sets, so
+  // one is never just the other reversed.
+  private async computeStopOrders(
     routeId: string,
     stops: RouteStop[],
-  ): Promise<RouteStop[]> {
+  ): Promise<{ pickupOrder: RouteStop[]; dropoffOrder: RouteStop[] }> {
+    const pickupStops = stops.filter(
+      (s) => s.student.tripType !== TripType.DROPOFF_ONLY,
+    );
+    const dropoffStops = stops.filter(
+      (s) => s.student.tripType !== TripType.PICKUP_ONLY,
+    );
+
     const apiKey = this.configService.get<string>('googleMaps.apiKey');
-
-    if (!apiKey) {
-      this.logger.warn(
-        `Route ${routeId}: no GOOGLE_MAPS_API_KEY configured — using nearest-neighbor fallback`,
-      );
-      return this.nearestNeighborSort(stops);
-    }
-
-    if (stops.length > MAX_STOPS_FOR_DIRECTIONS) {
-      this.logger.warn(
-        `Route ${routeId}: ${stops.length} stops exceeds the ${MAX_STOPS_FOR_DIRECTIONS}-stop Directions limit — using nearest-neighbor fallback`,
-      );
-      return this.nearestNeighborSort(stops);
-    }
 
     const route = await this.schoolRoutesService.findById(routeId);
     const assignment = await this.assignmentsService.findById(
@@ -199,91 +238,128 @@ export class RouteStopsService {
     const school = await this.schoolService.findById(assignment.schoolId);
     const company = await this.companyService.findById(route.companyId);
 
-    if (school.latitude == null || school.longitude == null) {
+    const hasCoords =
+      school.latitude != null &&
+      school.longitude != null &&
+      company.latitude != null &&
+      company.longitude != null;
+
+    if (!hasCoords) {
       this.logger.warn(
-        `Route ${routeId}: school ${school.id} has no coordinates — using nearest-neighbor fallback`,
+        `Route ${routeId}: school or company has no coordinates — using nearest-neighbor fallback for both legs`,
       );
-      return this.nearestNeighborSort(stops);
+      return {
+        pickupOrder: this.nearestNeighborSort(pickupStops),
+        dropoffOrder: this.nearestNeighborSort(dropoffStops),
+      };
     }
 
-    if (company.latitude == null || company.longitude == null) {
-      this.logger.warn(
-        `Route ${routeId}: company ${company.id} has no coordinates — using nearest-neighbor fallback`,
-      );
-      return this.nearestNeighborSort(stops);
+    const companyPoint: LatLng = { lat: company.latitude!, lng: company.longitude! };
+    const schoolPoint: LatLng = { lat: school.latitude!, lng: school.longitude! };
+
+    const pickup = await this.computeLegOrder(
+      routeId,
+      pickupStops,
+      companyPoint,
+      schoolPoint,
+      apiKey,
+      'pickup',
+    );
+    const dropoff = await this.computeLegOrder(
+      routeId,
+      dropoffStops,
+      schoolPoint,
+      companyPoint,
+      apiKey,
+      'dropoff',
+    );
+
+    const directionsCache: Parameters<
+      typeof this.schoolRoutesService.updateDirectionsCache
+    >[1] = { directionsUpdatedAt: new Date() };
+    let hasFreshDirections = false;
+
+    if (pickup.directions) {
+      directionsCache.polyline = pickup.directions.polyline;
+      directionsCache.distanceMeters = pickup.directions.distanceMeters;
+      directionsCache.durationSeconds = pickup.directions.durationSeconds;
+      hasFreshDirections = true;
+    }
+    if (dropoff.directions) {
+      directionsCache.polylineReturn = dropoff.directions.polyline;
+      directionsCache.distanceMetersReturn = dropoff.directions.distanceMeters;
+      directionsCache.durationSecondsReturn = dropoff.directions.durationSeconds;
+      hasFreshDirections = true;
     }
 
-    if (stops.length === 1) {
-      return [...stops];
+    if (hasFreshDirections) {
+      await this.schoolRoutesService.updateDirectionsCache(
+        routeId,
+        directionsCache,
+      );
+    }
+
+    return { pickupOrder: pickup.order, dropoffOrder: dropoff.order };
+  }
+
+  // Orders a single leg's stops via Google Directions' optimizeWaypoints,
+  // falling back to the local nearest-neighbor heuristic whenever Directions
+  // can't be used or fails for this leg specifically.
+  private async computeLegOrder(
+    routeId: string,
+    legStops: RouteStop[],
+    origin: LatLng,
+    destination: LatLng,
+    apiKey: string | undefined,
+    legLabel: 'pickup' | 'dropoff',
+  ): Promise<LegComputation> {
+    if (legStops.length === 0) {
+      return { order: [], directions: null };
+    }
+
+    if (!apiKey) {
+      this.logger.warn(
+        `Route ${routeId}: no GOOGLE_MAPS_API_KEY configured — using nearest-neighbor fallback for the ${legLabel} leg`,
+      );
+      return { order: this.nearestNeighborSort(legStops), directions: null };
+    }
+
+    if (legStops.length > MAX_STOPS_FOR_DIRECTIONS) {
+      this.logger.warn(
+        `Route ${routeId}: ${legStops.length} stops exceeds the ${MAX_STOPS_FOR_DIRECTIONS}-stop Directions limit for the ${legLabel} leg — using nearest-neighbor fallback`,
+      );
+      return { order: this.nearestNeighborSort(legStops), directions: null };
+    }
+
+    if (legStops.length === 1) {
+      return { order: [...legStops], directions: null };
     }
 
     try {
-      // Origin = the company's real depot location — every stop is a
-      // waypoint, none is consumed as a stand-in origin.
-      const origin = { lat: company.latitude, lng: company.longitude };
-      const destination = { lat: school.latitude, lng: school.longitude };
-
       const result = await this.directionsService.getOptimizedRoute(
         origin,
         destination,
-        stops.map((s) => ({
+        legStops.map((s) => ({
           lat: s.latitudeSnapshot,
           lng: s.longitudeSnapshot,
         })),
       );
 
-      const ordered = result.waypointOrder.map((idx) => stops[idx]);
-
-      const directionsCache: Parameters<
-        typeof this.schoolRoutesService.updateDirectionsCache
-      >[1] = {
-        polyline: result.polyline,
-        distanceMeters: result.distanceMeters,
-        durationSeconds: result.durationSeconds,
-        directionsUpdatedAt: new Date(),
+      return {
+        order: result.waypointOrder.map((idx) => legStops[idx]),
+        directions: {
+          polyline: result.polyline,
+          distanceMeters: result.distanceMeters,
+          durationSeconds: result.durationSeconds,
+        },
       };
-
-      // Return leg: mirrors the pickup order (school -> last pickup stop ->
-      // ... -> first pickup stop -> company) rather than re-optimizing, and
-      // is fetched as a real second call — not the pickup polyline reversed
-      // — because streets here often aren't symmetric (divided avenues,
-      // one-way segments).
-      try {
-        const returnWaypoints = [...ordered]
-          .reverse()
-          .map((s) => ({ lat: s.latitudeSnapshot, lng: s.longitudeSnapshot }));
-
-        const returnResult = await this.directionsService.getOptimizedRoute(
-          destination,
-          origin,
-          returnWaypoints,
-          false,
-        );
-
-        directionsCache.polylineReturn = returnResult.polyline;
-        directionsCache.distanceMetersReturn = returnResult.distanceMeters;
-        directionsCache.durationSecondsReturn = returnResult.durationSeconds;
-      } catch (returnError) {
-        this.logger.warn(
-          `Route ${routeId}: return-leg Directions call failed (${
-            (returnError as Error).message
-          }) — keeping previous return polyline cache`,
-        );
-      }
-
-      await this.schoolRoutesService.updateDirectionsCache(
-        routeId,
-        directionsCache,
-      );
-
-      return ordered;
     } catch (error) {
       this.logger.warn(
-        `Route ${routeId}: Google Directions call failed (${
+        `Route ${routeId}: Google Directions call failed for the ${legLabel} leg (${
           (error as Error).message
         }) — using nearest-neighbor fallback`,
       );
-      return this.nearestNeighborSort(stops);
+      return { order: this.nearestNeighborSort(legStops), directions: null };
     }
   }
 

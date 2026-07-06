@@ -5,8 +5,15 @@ export interface RouteStopFilters {
   studentId?: string;
 }
 
+export interface RouteStopOrderUpdate {
+  stopOrder: number | null;
+  stopOrderReturn: number | null;
+}
+
 export interface IRouteStopRepository {
   create(data: Partial<RouteStop>): Promise<RouteStop>;
+  // Eager-loads the `student` relation — callers need `student.tripType` to
+  // split stops into pickup/dropoff legs.
   findAll(filters: RouteStopFilters): Promise<RouteStop[]>;
   findById(id: string): Promise<RouteStop | null>;
   findByStudentId(studentId: string): Promise<RouteStop | null>;
@@ -14,8 +21,8 @@ export interface IRouteStopRepository {
     routeId: string,
     studentId: string,
   ): Promise<RouteStop | null>;
-  // Updates only the stop_order field — avoids overwriting the coordinate snapshot
-  updateOrder(id: string, stopOrder: number): Promise<void>;
+  // Updates only the two order fields — avoids overwriting the coordinate snapshot
+  updateOrder(id: string, order: RouteStopOrderUpdate): Promise<void>;
   delete(id: string): Promise<void>;
 }
 

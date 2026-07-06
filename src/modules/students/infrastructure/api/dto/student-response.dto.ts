@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 import { StudentStatus } from '../../../domain/enums/student-status.enum';
+import { TripType } from '../../../domain/enums/trip-type.enum';
 
 export class StudentResponseDto {
   @ApiProperty({ example: 'd4e5f6a7-b8c9-0123-defa-234567890123' })
@@ -77,6 +78,10 @@ export class StudentResponseDto {
   @ApiProperty({ enum: StudentStatus, example: StudentStatus.ACTIVE })
   @Expose()
   status: StudentStatus;
+
+  @ApiProperty({ enum: TripType, example: TripType.ROUND_TRIP })
+  @Expose()
+  tripType: TripType;
 
   @ApiPropertyOptional({
     example: 'Student requires special assistance.',
