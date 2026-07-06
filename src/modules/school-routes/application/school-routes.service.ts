@@ -42,6 +42,24 @@ export class SchoolRoutesService {
     await this.routeRepository.softDelete(id);
   }
 
+  // Called by RouteStopsService after a successful Google Directions call —
+  // persists the cached polyline/distance/duration so it isn't refetched on
+  // every route read, only when the stop set actually changes.
+  async updateDirectionsCache(
+    id: string,
+    data: {
+      polyline: string;
+      distanceMeters: number;
+      durationSeconds: number;
+      directionsUpdatedAt: Date;
+      polylineReturn?: string;
+      distanceMetersReturn?: number;
+      durationSecondsReturn?: number;
+    },
+  ): Promise<void> {
+    await this.routeRepository.update(id, data);
+  }
+
   // ── syncRoute ──────────────────────────────────────────────────────────────────
   //
   // Called exclusively by SchoolAssignmentsService — never exposed via REST.

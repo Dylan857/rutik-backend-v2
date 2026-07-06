@@ -22,6 +22,42 @@ export class SchoolRouteResponseDto {
   @Expose()
   status: RouteStatus;
 
+  @ApiProperty({
+    example: '_ibE_seK_seK_seK',
+    description: 'Encoded Google polyline for the optimized route, if computed',
+    nullable: true,
+  })
+  @Expose()
+  polyline: string | null;
+
+  @ApiProperty({ example: 12500, nullable: true })
+  @Expose()
+  distanceMeters: number | null;
+
+  @ApiProperty({ example: 1800, nullable: true })
+  @Expose()
+  durationSeconds: number | null;
+
+  @ApiProperty({ example: '2026-01-15T10:30:00.000Z', nullable: true })
+  @Expose()
+  directionsUpdatedAt: Date | null;
+
+  @ApiProperty({
+    example: '_ibE_seK_seK_seK',
+    description: 'Encoded Google polyline for the return (drop-off) leg, if computed',
+    nullable: true,
+  })
+  @Expose()
+  polylineReturn: string | null;
+
+  @ApiProperty({ example: 12800, nullable: true })
+  @Expose()
+  distanceMetersReturn: number | null;
+
+  @ApiProperty({ example: 1850, nullable: true })
+  @Expose()
+  durationSecondsReturn: number | null;
+
   @ApiProperty({ example: '2026-01-15T10:30:00.000Z' })
   @Expose()
   createdAt: Date;

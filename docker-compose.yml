@@ -22,6 +22,7 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     volumes:
       - .:/app
       - /app/node_modules

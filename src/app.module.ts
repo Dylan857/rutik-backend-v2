@@ -20,12 +20,13 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
+import googleMapsConfig from './shared/config/google-maps.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig],
+      load: [appConfig, databaseConfig, jwtConfig, googleMapsConfig],
       envFilePath: '.env',
     }),
     DatabaseModule,
