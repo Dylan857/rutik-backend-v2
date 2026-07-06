@@ -32,4 +32,29 @@ export class SchoolRoute extends BaseEntity {
 
   @Column({ type: 'enum', enum: RouteStatus, default: RouteStatus.ACTIVE })
   status: RouteStatus;
+
+  @Column({ type: 'text', nullable: true })
+  polyline: string | null;
+
+  @Column({ name: 'distance_meters', type: 'int', nullable: true })
+  distanceMeters: number | null;
+
+  @Column({ name: 'duration_seconds', type: 'int', nullable: true })
+  durationSeconds: number | null;
+
+  @Column({
+    name: 'directions_updated_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  directionsUpdatedAt: Date | null;
+
+  @Column({ name: 'polyline_return', type: 'text', nullable: true })
+  polylineReturn: string | null;
+
+  @Column({ name: 'distance_meters_return', type: 'int', nullable: true })
+  distanceMetersReturn: number | null;
+
+  @Column({ name: 'duration_seconds_return', type: 'int', nullable: true })
+  durationSecondsReturn: number | null;
 }

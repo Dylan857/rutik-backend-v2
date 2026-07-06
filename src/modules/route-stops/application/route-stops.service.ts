@@ -5,10 +5,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AssignmentStatus } from '../../school-assignments/domain/enums/assignment-status.enum';
 import { SchoolAssignmentsService } from '../../school-assignments/application/school-assignments.service';
 import { RouteStatus } from '../../school-routes/domain/enums/route-status.enum';
 import { SchoolRoutesService } from '../../school-routes/application/school-routes.service';
+import { SchoolService } from '../../school/application/school.service';
+import { CompanyService } from '../../company/application/company.service';
 import { Student } from '../../students/domain/student.entity';
 import { RouteStop } from '../domain/route-stop.entity';
 import {
@@ -16,6 +19,13 @@ import {
   RouteStopFilters,
   ROUTE_STOP_REPOSITORY,
 } from '../domain/interfaces/route-stop.repository';
+import { GoogleDirectionsService } from '../infrastructure/external/google-directions.service';
+
+// Google Directions caps waypoints per request at 25 total (origin +
+// destination + up to 23 intermediate stops). The company is the fixed
+// origin and every stop is a waypoint, so routes with more than 23 stops
+// can't fit and fall back to nearest-neighbor entirely.
+const MAX_STOPS_FOR_DIRECTIONS = 23;
 
 @Injectable()
 export class RouteStopsService {
@@ -26,6 +36,10 @@ export class RouteStopsService {
     private readonly routeStopRepository: IRouteStopRepository,
     private readonly assignmentsService: SchoolAssignmentsService,
     private readonly schoolRoutesService: SchoolRoutesService,
+    private readonly schoolService: SchoolService,
+    private readonly companyService: CompanyService,
+    private readonly directionsService: GoogleDirectionsService,
+    private readonly configService: ConfigService,
   ) {}
 
   // ── Public read methods (consumed by controllers) ───────────────────────────
@@ -142,7 +156,7 @@ export class RouteStopsService {
 
     if (stops.length === 0) return;
 
-    const ordered = this.computeStopOrder(stops);
+    const ordered = await this.computeStopOrder(routeId, stops);
 
     for (let i = 0; i < ordered.length; i++) {
       await this.routeStopRepository.updateOrder(ordered[i].id, i + 1);
@@ -155,10 +169,122 @@ export class RouteStopsService {
 
   // ── Private algorithm ────────────────────────────────────────────────────────
 
-  // Entry point for the ordering algorithm. Swap this method body to plug in
-  // a different strategy (e.g. Google Directions API) in a future version.
-  private computeStopOrder(stops: RouteStop[]): RouteStop[] {
-    return this.nearestNeighborSort(stops);
+  // Directions-first: uses Google Directions' optimizeWaypoints to order stops
+  // toward a fixed destination (the school), falling back to the local
+  // nearest-neighbor heuristic whenever Directions can't be used or fails.
+  private async computeStopOrder(
+    routeId: string,
+    stops: RouteStop[],
+  ): Promise<RouteStop[]> {
+    const apiKey = this.configService.get<string>('googleMaps.apiKey');
+
+    if (!apiKey) {
+      this.logger.warn(
+        `Route ${routeId}: no GOOGLE_MAPS_API_KEY configured — using nearest-neighbor fallback`,
+      );
+      return this.nearestNeighborSort(stops);
+    }
+
+    if (stops.length > MAX_STOPS_FOR_DIRECTIONS) {
+      this.logger.warn(
+        `Route ${routeId}: ${stops.length} stops exceeds the ${MAX_STOPS_FOR_DIRECTIONS}-stop Directions limit — using nearest-neighbor fallback`,
+      );
+      return this.nearestNeighborSort(stops);
+    }
+
+    const route = await this.schoolRoutesService.findById(routeId);
+    const assignment = await this.assignmentsService.findById(
+      route.schoolAssignmentId,
+    );
+    const school = await this.schoolService.findById(assignment.schoolId);
+    const company = await this.companyService.findById(route.companyId);
+
+    if (school.latitude == null || school.longitude == null) {
+      this.logger.warn(
+        `Route ${routeId}: school ${school.id} has no coordinates — using nearest-neighbor fallback`,
+      );
+      return this.nearestNeighborSort(stops);
+    }
+
+    if (company.latitude == null || company.longitude == null) {
+      this.logger.warn(
+        `Route ${routeId}: company ${company.id} has no coordinates — using nearest-neighbor fallback`,
+      );
+      return this.nearestNeighborSort(stops);
+    }
+
+    if (stops.length === 1) {
+      return [...stops];
+    }
+
+    try {
+      // Origin = the company's real depot location — every stop is a
+      // waypoint, none is consumed as a stand-in origin.
+      const origin = { lat: company.latitude, lng: company.longitude };
+      const destination = { lat: school.latitude, lng: school.longitude };
+
+      const result = await this.directionsService.getOptimizedRoute(
+        origin,
+        destination,
+        stops.map((s) => ({
+          lat: s.latitudeSnapshot,
+          lng: s.longitudeSnapshot,
+        })),
+      );
+
+      const ordered = result.waypointOrder.map((idx) => stops[idx]);
+
+      const directionsCache: Parameters<
+        typeof this.schoolRoutesService.updateDirectionsCache
+      >[1] = {
+        polyline: result.polyline,
+        distanceMeters: result.distanceMeters,
+        durationSeconds: result.durationSeconds,
+        directionsUpdatedAt: new Date(),
+      };
+
+      // Return leg: mirrors the pickup order (school -> last pickup stop ->
+      // ... -> first pickup stop -> company) rather than re-optimizing, and
+      // is fetched as a real second call — not the pickup polyline reversed
+      // — because streets here often aren't symmetric (divided avenues,
+      // one-way segments).
+      try {
+        const returnWaypoints = [...ordered]
+          .reverse()
+          .map((s) => ({ lat: s.latitudeSnapshot, lng: s.longitudeSnapshot }));
+
+        const returnResult = await this.directionsService.getOptimizedRoute(
+          destination,
+          origin,
+          returnWaypoints,
+          false,
+        );
+
+        directionsCache.polylineReturn = returnResult.polyline;
+        directionsCache.distanceMetersReturn = returnResult.distanceMeters;
+        directionsCache.durationSecondsReturn = returnResult.durationSeconds;
+      } catch (returnError) {
+        this.logger.warn(
+          `Route ${routeId}: return-leg Directions call failed (${
+            (returnError as Error).message
+          }) — keeping previous return polyline cache`,
+        );
+      }
+
+      await this.schoolRoutesService.updateDirectionsCache(
+        routeId,
+        directionsCache,
+      );
+
+      return ordered;
+    } catch (error) {
+      this.logger.warn(
+        `Route ${routeId}: Google Directions call failed (${
+          (error as Error).message
+        }) — using nearest-neighbor fallback`,
+      );
+      return this.nearestNeighborSort(stops);
+    }
   }
 
   // Greedy nearest-neighbor starting from the northernmost stop (highest latitude).
