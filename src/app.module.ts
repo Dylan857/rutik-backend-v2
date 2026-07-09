@@ -17,16 +17,24 @@ import { SchoolRoutesModule } from './modules/school-routes/school-routes.module
 import { RouteStopsModule } from './modules/route-stops/route-stops.module';
 import { StudentPaymentsModule } from './modules/student-payments/student-payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
 import googleMapsConfig from './shared/config/google-maps.config';
+import mailConfig from './shared/config/mail.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, jwtConfig, googleMapsConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        jwtConfig,
+        googleMapsConfig,
+        mailConfig,
+      ],
       envFilePath: '.env',
     }),
     DatabaseModule,
@@ -46,6 +54,7 @@ import googleMapsConfig from './shared/config/google-maps.config';
     RouteStopsModule,
     StudentPaymentsModule,
     DashboardModule,
+    PasswordResetModule,
   ],
 })
 export class AppModule {}
