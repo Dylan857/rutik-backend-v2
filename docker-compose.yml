@@ -23,6 +23,8 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-only-refresh-secret}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
     volumes:
       - .:/app
       - /app/node_modules

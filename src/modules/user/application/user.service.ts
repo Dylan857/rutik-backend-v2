@@ -96,4 +96,9 @@ export class UserService {
   async updateLastLogin(id: string): Promise<void> {
     await this.userRepository.updateLastLogin(id);
   }
+
+  async updatePassword(id: string, plainPassword: string): Promise<void> {
+    const hashedPassword = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
+    await this.userRepository.update(id, { password: hashedPassword });
+  }
 }
