@@ -16,6 +16,7 @@ import { SchoolAssignmentsModule } from './modules/school-assignments/school-ass
 import { SchoolRoutesModule } from './modules/school-routes/school-routes.module';
 import { RouteStopsModule } from './modules/route-stops/route-stops.module';
 import { StudentPaymentsModule } from './modules/student-payments/student-payments.module';
+import { DriverPaymentsModule } from './modules/driver-payments/driver-payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import appConfig from './shared/config/app.config';
@@ -53,6 +54,7 @@ import mailConfig from './shared/config/mail.config';
     SchoolRoutesModule,
     RouteStopsModule,
     StudentPaymentsModule,
+    DriverPaymentsModule,
     DashboardModule,
     PasswordResetModule,
   ],
