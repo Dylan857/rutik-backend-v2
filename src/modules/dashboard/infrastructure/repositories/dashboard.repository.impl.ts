@@ -8,6 +8,7 @@ import { SchoolRoute } from '../../../school-routes/domain/school-route.entity';
 import { RouteStatus } from '../../../school-routes/domain/enums/route-status.enum';
 import { StudentPayment } from '../../../student-payments/domain/student-payment.entity';
 import { PaymentStatus } from '../../../student-payments/domain/enums/payment-status.enum';
+import { PAYMENT_STATUS_CASE } from '../../../student-payments/domain/payment-status-case.sql';
 import {
   IDashboardRepository,
   PaymentAmountTotals,
@@ -19,19 +20,7 @@ import {
 
 @Injectable()
 export class DashboardRepositoryImpl implements IDashboardRepository {
-  // Mirrors StudentPaymentsService.deriveComputedFields' priority order
-  // (PAID > PARTIAL > OVERDUE > PENDING). The persisted `status` column can be
-  // stale — there is no cron sweeping PENDING rows into OVERDUE — so every
-  // aggregation here recomputes status live instead of trusting the column,
-  // the same way individual reads already do.
-  private static readonly STATUS_CASE = `
-    CASE
-      WHEN payment.amountPaid >= payment.monthlyFee THEN '${PaymentStatus.PAID}'
-      WHEN payment.amountPaid > 0 THEN '${PaymentStatus.PARTIAL}'
-      WHEN payment.dueDate IS NOT NULL AND payment.dueDate < CURRENT_DATE THEN '${PaymentStatus.OVERDUE}'
-      ELSE '${PaymentStatus.PENDING}'
-    END
-  `;
+  private static readonly STATUS_CASE = PAYMENT_STATUS_CASE;
 
   constructor(
     @InjectRepository(Student)

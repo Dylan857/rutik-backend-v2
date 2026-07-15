@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,7 +7,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -27,9 +27,11 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { StudentPaymentsService } from '../../../application/student-payments.service';
 import { PaymentStatus } from '../../../domain/enums/payment-status.enum';
@@ -37,6 +39,7 @@ import { CreateStudentPaymentDto } from '../dto/create-student-payment.dto';
 import { UpdateStudentPaymentDto } from '../dto/update-student-payment.dto';
 import { StudentPaymentResponseDto } from '../dto/student-payment-response.dto';
 import { GenerateBillingCycleResponseDto } from '../dto/billing-cycle-response.dto';
+import { PaymentsSummaryResponseDto } from '../dto/payments-summary-response.dto';
 
 @ApiTags('Student Payments')
 @Controller('student-payments')
@@ -144,6 +147,91 @@ export class StudentPaymentController {
       status,
     });
     return plainToInstance(StudentPaymentResponseDto, payments, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary:
+      'Get payment status counts and revenue totals for the authenticated ' +
+      'company, optionally filtered by school and billing period',
+    description:
+      'Unlike GET /dashboard, both expected and collected revenue (and the ' +
+      'paid/partial/pending/overdue counts) are scoped to the schoolId/period ' +
+      'filter — meant to back a filterable payments-list view rather than a ' +
+      'fixed-to-current-period widget. Omitting schoolId returns totals ' +
+      'across every school. Omitting billingMonth/billingYear defaults to ' +
+      'the current calendar billing period.',
+  })
+  @ApiQuery({
+    name: 'schoolId',
+    required: false,
+    description: 'Filter by school UUID. Omit to include every school.',
+  })
+  @ApiQuery({
+    name: 'billingMonth',
+    required: false,
+    description:
+      'Billing month (1-12) to summarize. Must be provided together with billingYear.',
+  })
+  @ApiQuery({
+    name: 'billingYear',
+    required: false,
+    description:
+      'Billing year to summarize. Must be provided together with billingMonth.',
+  })
+  @ApiOkResponse({ type: PaymentsSummaryResponseDto })
+  @ApiBadRequestResponse({
+    description:
+      'User is not associated with a company, or billingMonth/billingYear were not provided together / are invalid',
+  })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async getSummary(
+    @CurrentUser() currentUser: JwtPayload,
+    @Query('schoolId') schoolId?: string,
+    @Query('billingMonth') billingMonth?: string,
+    @Query('billingYear') billingYear?: string,
+  ): Promise<PaymentsSummaryResponseDto> {
+    if (!currentUser.companyId) {
+      throw new BadRequestException('User is not associated with a company');
+    }
+
+    if ((billingMonth === undefined) !== (billingYear === undefined)) {
+      throw new BadRequestException(
+        'billingMonth and billingYear must be provided together',
+      );
+    }
+
+    let parsedBillingMonth: number | undefined;
+    let parsedBillingYear: number | undefined;
+
+    if (billingMonth !== undefined && billingYear !== undefined) {
+      parsedBillingMonth = parseInt(billingMonth, 10);
+      parsedBillingYear = parseInt(billingYear, 10);
+
+      if (
+        !Number.isInteger(parsedBillingMonth) ||
+        parsedBillingMonth < 1 ||
+        parsedBillingMonth > 12
+      ) {
+        throw new BadRequestException('billingMonth must be between 1 and 12');
+      }
+      if (!Number.isInteger(parsedBillingYear)) {
+        throw new BadRequestException('billingYear must be a valid year');
+      }
+    }
+
+    const summary = await this.paymentsService.getPaymentsSummary(
+      currentUser.companyId,
+      parsedBillingMonth,
+      parsedBillingYear,
+      schoolId,
+    );
+    return plainToInstance(PaymentsSummaryResponseDto, summary, {
       excludeExtraneousValues: true,
     });
   }

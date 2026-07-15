@@ -9,10 +9,39 @@ export interface PaymentFilters {
   status?: PaymentStatus;
 }
 
+export interface PaymentStatusCounts {
+  paid: number;
+  partial: number;
+  pending: number;
+  overdue: number;
+  totalStudents: number;
+}
+
+export interface PaymentAmountTotals {
+  expected: number;
+  collected: number;
+}
+
 export interface IStudentPaymentRepository {
   create(data: Partial<StudentPayment>): Promise<StudentPayment>;
   findAll(filters: PaymentFilters): Promise<StudentPayment[]>;
   findById(id: string): Promise<StudentPayment | null>;
+  // Status counts (paid/partial/pending/overdue) for a company/period,
+  // optionally narrowed to a single school via a join on student.schoolId.
+  getPaymentStatusCounts(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+    schoolId?: string,
+  ): Promise<PaymentStatusCounts>;
+  // Expected (monthlyFee sum) vs collected (amountPaid sum) for a
+  // company/period, optionally narrowed to a single school.
+  getPaymentAmountTotals(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+    schoolId?: string,
+  ): Promise<PaymentAmountTotals>;
   // Used to enforce the no-duplicate-per-student-month-year rule
   findByStudentAndPeriod(
     studentId: string,
