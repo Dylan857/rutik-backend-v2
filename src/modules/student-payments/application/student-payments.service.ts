@@ -13,7 +13,9 @@ import { StudentPayment } from '../domain/student-payment.entity';
 import { PaymentStatus } from '../domain/enums/payment-status.enum';
 import {
   IStudentPaymentRepository,
+  PaymentAmountTotals,
   PaymentFilters,
+  PaymentStatusCounts,
   STUDENT_PAYMENT_REPOSITORY,
 } from '../domain/interfaces/student-payment.repository';
 import { CreateStudentPaymentDto } from '../infrastructure/api/dto/create-student-payment.dto';
@@ -45,6 +47,17 @@ export interface BillingCycleCompanyResult {
   // True when the company had already reached the reference ceiling and
   // nothing was opened for it in this run.
   upToDate: boolean;
+}
+
+export interface PaymentsSummaryResult {
+  billingMonth: number;
+  billingYear: number;
+  schoolId: string | null;
+  paymentStatus: PaymentStatusCounts & { collectionPercentage: number };
+  revenue: PaymentAmountTotals & {
+    remaining: number;
+    collectionPercentage: number;
+  };
 }
 
 export interface BillingCycleSummary {
@@ -182,6 +195,76 @@ export class StudentPaymentsService {
   async softDelete(id: string): Promise<void> {
     await this.findById(id);
     await this.paymentRepository.softDelete(id);
+  }
+
+  /**
+   * Status counts (paid/partial/pending/overdue) and revenue totals
+   * (expected/collected) for a company, optionally narrowed to a single
+   * school. Unlike the main dashboard's revenueSummary, both expected and
+   * collected are scoped to the same schoolId/period filter here — this is
+   * meant to back a filterable payments-list view, not the dashboard's
+   * fixed-to-current-period widget. billingMonth/billingYear default to the
+   * current calendar billing period when omitted.
+   */
+  async getPaymentsSummary(
+    companyId: string,
+    billingMonth?: number,
+    billingYear?: number,
+    schoolId?: string,
+  ): Promise<PaymentsSummaryResult> {
+    const period =
+      billingMonth !== undefined && billingYear !== undefined
+        ? { billingMonth, billingYear }
+        : this.getCurrentBillingPeriod();
+
+    const [statusCounts, amountTotals] = await Promise.all([
+      this.paymentRepository.getPaymentStatusCounts(
+        companyId,
+        period.billingMonth,
+        period.billingYear,
+        schoolId,
+      ),
+      this.paymentRepository.getPaymentAmountTotals(
+        companyId,
+        period.billingMonth,
+        period.billingYear,
+        schoolId,
+      ),
+    ]);
+
+    return {
+      billingMonth: period.billingMonth,
+      billingYear: period.billingYear,
+      schoolId: schoolId ?? null,
+      paymentStatus: {
+        ...statusCounts,
+        collectionPercentage: this.calculatePercentage(
+          statusCounts.paid,
+          statusCounts.totalStudents,
+        ),
+      },
+      revenue: {
+        ...amountTotals,
+        remaining: Math.max(0, amountTotals.expected - amountTotals.collected),
+        collectionPercentage: this.calculatePercentage(
+          amountTotals.collected,
+          amountTotals.expected,
+        ),
+      },
+    };
+  }
+
+  private getCurrentBillingPeriod(): {
+    billingMonth: number;
+    billingYear: number;
+  } {
+    const now = new Date();
+    return { billingMonth: now.getMonth() + 1, billingYear: now.getFullYear() };
+  }
+
+  private calculatePercentage(part: number, total: number): number {
+    if (total <= 0) return 0;
+    return Math.round((part / total) * 10000) / 100;
   }
 
   /**
