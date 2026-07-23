@@ -1,0 +1,3 @@
+export enum NotificationType {
+  VEHICLE_DOCUMENT_EXPIRING = 'VEHICLE_DOCUMENT_EXPIRING',
+}

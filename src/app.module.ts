@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './shared/database/database.module';
 import { HealthModule } from './modules/health/health.module';
 import { CompanyModule } from './modules/company/company.module';
@@ -19,6 +20,7 @@ import { StudentPaymentsModule } from './modules/student-payments/student-paymen
 import { DriverPaymentsModule } from './modules/driver-payments/driver-payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
@@ -38,6 +40,7 @@ import mailConfig from './shared/config/mail.config';
       ],
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     DatabaseModule,
     HealthModule,
     CompanyModule,
@@ -57,6 +60,7 @@ import mailConfig from './shared/config/mail.config';
     DriverPaymentsModule,
     DashboardModule,
     PasswordResetModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
