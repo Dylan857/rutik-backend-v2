@@ -24,16 +24,21 @@ import {
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
 import { VehiclesService } from '../../../application/vehicles.service';
+import { VehicleDetailService } from '../../../application/vehicle-detail.service';
 import { VehicleStatus } from '../../../domain/enums/vehicle-status.enum';
 import { VehicleType } from '../../../domain/enums/vehicle-type.enum';
 import { CreateVehicleDto } from '../dto/create-vehicle.dto';
 import { UpdateVehicleDto } from '../dto/update-vehicle.dto';
 import { VehicleResponseDto } from '../dto/vehicle-response.dto';
+import { VehicleDetailResponseDto } from '../dto/vehicle-detail-response.dto';
 
 @ApiTags('Vehicles')
 @Controller('vehicles')
 export class VehicleController {
-  constructor(private readonly vehiclesService: VehiclesService) {}
+  constructor(
+    private readonly vehiclesService: VehiclesService,
+    private readonly vehicleDetailService: VehicleDetailService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -100,16 +105,47 @@ export class VehicleController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a vehicle by ID' })
-  @ApiOkResponse({ type: VehicleResponseDto })
+  @ApiOperation({
+    summary: 'Get a vehicle by ID with its full detail',
+    description:
+      'Returns the vehicle plus, in the same call, its fuel spend for a ' +
+      'period (defaults to the current month), its active routes, and the ' +
+      'students currently assigned to those routes.',
+  })
+  @ApiOkResponse({ type: VehicleDetailResponseDto })
   @ApiNotFoundResponse({ description: 'Vehicle not found' })
+  @ApiBadRequestResponse({ description: 'month/year out of range' })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Fuel period month (1-12). Defaults to the current month.',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    description: 'Fuel period year. Defaults to the current year.',
+  })
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<VehicleResponseDto> {
-    const vehicle = await this.vehiclesService.findById(id);
-    return plainToInstance(VehicleResponseDto, vehicle, {
-      excludeExtraneousValues: true,
-    });
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ): Promise<VehicleDetailResponseDto> {
+    const detail = await this.vehicleDetailService.getDetail(
+      id,
+      month !== undefined ? Number(month) : undefined,
+      year !== undefined ? Number(year) : undefined,
+    );
+
+    return plainToInstance(
+      VehicleDetailResponseDto,
+      {
+        ...detail.vehicle,
+        fuel: detail.fuel,
+        activeRoutes: detail.activeRoutes,
+        assignedStudents: detail.assignedStudents,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   @Patch(':id')
