@@ -21,6 +21,7 @@ import { DriverPaymentsModule } from './modules/driver-payments/driver-payments.
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { FuelLogsModule } from './modules/fuel-logs/fuel-logs.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
@@ -61,6 +62,7 @@ import mailConfig from './shared/config/mail.config';
     DashboardModule,
     PasswordResetModule,
     NotificationsModule,
+    FuelLogsModule,
   ],
 })
 export class AppModule {}
