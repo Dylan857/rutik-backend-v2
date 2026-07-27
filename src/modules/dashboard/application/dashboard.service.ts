@@ -43,8 +43,8 @@ export class DashboardService {
 
   async getDashboard(
     companyId: string,
-    collectedBillingMonth?: number,
-    collectedBillingYear?: number,
+    revenueBillingMonth?: number,
+    revenueBillingYear?: number,
   ): Promise<DashboardData> {
     const { billingMonth, billingYear } = this.getCurrentBillingPeriod();
 
@@ -59,10 +59,8 @@ export class DashboardService {
       this.getPaymentSummary(companyId, billingMonth, billingYear),
       this.getRevenueSummary(
         companyId,
-        billingMonth,
-        billingYear,
-        collectedBillingMonth,
-        collectedBillingYear,
+        revenueBillingMonth ?? billingMonth,
+        revenueBillingYear ?? billingYear,
       ),
       this.getUpcomingPayments(companyId, billingMonth, billingYear),
       this.getRecentActivity(companyId),
@@ -106,20 +104,10 @@ export class DashboardService {
     };
   }
 
-  /**
-   * expected/remaining/collectionPercentage always reflect the CURRENT
-   * billing period, same as before this method took a collected-period
-   * override. Only `collected` swaps to reflect collectedBillingMonth/Year
-   * when provided — a dashboard-only lens for glancing at a previous
-   * period's revenue without shifting the rest of the widget (or the rest
-   * of the dashboard) off the current period.
-   */
   private async getRevenueSummary(
     companyId: string,
     billingMonth: number,
     billingYear: number,
-    collectedBillingMonth?: number,
-    collectedBillingYear?: number,
   ): Promise<RevenueSummaryData> {
     const totals = await this.dashboardRepository.getPaymentAmountTotals(
       companyId,
@@ -127,23 +115,9 @@ export class DashboardService {
       billingYear,
     );
 
-    let collected = totals.collected;
-    if (
-      collectedBillingMonth !== undefined &&
-      collectedBillingYear !== undefined
-    ) {
-      const collectedTotals =
-        await this.dashboardRepository.getPaymentAmountTotals(
-          companyId,
-          collectedBillingMonth,
-          collectedBillingYear,
-        );
-      collected = collectedTotals.collected;
-    }
-
     return {
       expected: totals.expected,
-      collected,
+      collected: totals.collected,
       remaining: Math.max(0, totals.expected - totals.collected),
       collectionPercentage: this.calculatePercentage(
         totals.collected,
