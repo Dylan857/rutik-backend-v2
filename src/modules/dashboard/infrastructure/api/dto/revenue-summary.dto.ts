@@ -4,7 +4,10 @@ import { Expose } from 'class-transformer';
 export class RevenueSummaryDto {
   @ApiProperty({
     example: 19200000,
-    description: 'Total expected revenue for the current billing period',
+    description:
+      'Total expected revenue for the billing period. Reflects the ' +
+      'current billing period by default, or the billingMonth/billingYear ' +
+      'query params when provided.',
   })
   @Expose()
   expected: number;
@@ -12,9 +15,7 @@ export class RevenueSummaryDto {
   @ApiProperty({
     example: 14350000,
     description:
-      'Total amount collected. Reflects the current billing period by ' +
-      'default, or the billingMonth/billingYear query params when provided ' +
-      '— the only value in the dashboard affected by that filter.',
+      'Total amount collected for the same billing period as `expected`.',
   })
   @Expose()
   collected: number;
