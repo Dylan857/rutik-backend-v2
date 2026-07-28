@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompanyModule } from '../company/company.module';
 import { StudentsModule } from '../students/students.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { StudentPayment } from './domain/student-payment.entity';
 import { STUDENT_PAYMENT_REPOSITORY } from './domain/interfaces/student-payment.repository';
 import { StudentPaymentRepositoryImpl } from './infrastructure/repositories/student-payment.repository.impl';
@@ -13,6 +14,7 @@ import { StudentPaymentController } from './infrastructure/api/controllers/stude
     TypeOrmModule.forFeature([StudentPayment]),
     CompanyModule,
     StudentsModule,
+    NotificationsModule,
   ],
   controllers: [StudentPaymentController],
   providers: [
