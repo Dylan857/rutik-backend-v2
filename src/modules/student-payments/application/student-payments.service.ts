@@ -9,6 +9,10 @@ import { CompanyService } from '../../company/application/company.service';
 import { CompanyStatus } from '../../company/domain/enums/company-status.enum';
 import { StudentService } from '../../students/application/students.service';
 import { StudentStatus } from '../../students/domain/enums/student-status.enum';
+import { NotificationsService } from '../../notifications/application/notifications.service';
+import { NotificationType } from '../../notifications/domain/enums/notification-type.enum';
+import { NotificationSeverity } from '../../notifications/domain/enums/notification-severity.enum';
+import { NotificationSourceType } from '../../notifications/domain/enums/notification-source-type.enum';
 import { StudentPayment } from '../domain/student-payment.entity';
 import { PaymentStatus } from '../domain/enums/payment-status.enum';
 import {
@@ -80,6 +84,7 @@ export class StudentPaymentsService {
     private readonly paymentRepository: IStudentPaymentRepository,
     private readonly companyService: CompanyService,
     private readonly studentService: StudentService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(dto: CreateStudentPaymentDto): Promise<StudentPayment> {
@@ -360,6 +365,22 @@ export class StudentPaymentsService {
       });
       totalCreated += created;
       totalSkipped += skipped;
+
+      // Only notify when this run actually opened up new payments for the
+      // period — re-running against an already-covered period is a no-op
+      // and shouldn't re-alert admins (dedupeKey guards it either way).
+      if (created > 0) {
+        const periodLabel = `${String(period.billingMonth).padStart(2, '0')}/${period.billingYear}`;
+        await this.notificationsService.create({
+          companyId: company.id,
+          type: NotificationType.BILLING_CYCLE_READY,
+          severity: NotificationSeverity.INFO,
+          title: `Pagos del período ${periodLabel} listos`,
+          message: `Se generaron ${created} pago(s) para el período de facturación ${periodLabel}.`,
+          sourceType: NotificationSourceType.BILLING_CYCLE,
+          dedupeKey: `${NotificationType.BILLING_CYCLE_READY}:${company.id}:${period.billingMonth}:${period.billingYear}`,
+        });
+      }
     }
 
     return {
