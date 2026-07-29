@@ -43,10 +43,12 @@ export class DashboardService {
 
   async getDashboard(
     companyId: string,
-    revenueBillingMonth?: number,
-    revenueBillingYear?: number,
+    selectedBillingMonth?: number,
+    selectedBillingYear?: number,
   ): Promise<DashboardData> {
     const { billingMonth, billingYear } = this.getCurrentBillingPeriod();
+    const periodMonth = selectedBillingMonth ?? billingMonth;
+    const periodYear = selectedBillingYear ?? billingYear;
 
     const [
       summaryCards,
@@ -56,12 +58,8 @@ export class DashboardService {
       recentActivity,
     ] = await Promise.all([
       this.getSummaryCards(companyId),
-      this.getPaymentSummary(companyId, billingMonth, billingYear),
-      this.getRevenueSummary(
-        companyId,
-        revenueBillingMonth ?? billingMonth,
-        revenueBillingYear ?? billingYear,
-      ),
+      this.getPaymentSummary(companyId, periodMonth, periodYear),
+      this.getRevenueSummary(companyId, periodMonth, periodYear),
       this.getUpcomingPayments(companyId, billingMonth, billingYear),
       this.getRecentActivity(companyId),
     ]);

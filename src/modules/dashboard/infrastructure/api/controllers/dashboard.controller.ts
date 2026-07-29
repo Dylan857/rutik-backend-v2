@@ -36,22 +36,24 @@ export class DashboardController {
     summary: 'Get the dashboard summary for the authenticated company',
     description:
       'billingMonth/billingYear are optional and, when both are provided, ' +
-      'change revenueSummary (expected, collected, remaining, ' +
-      'collectionPercentage) to reflect that period instead of the current ' +
-      'one — every other value in the dashboard still reflects the current ' +
-      'billing period. Defaults to the current billing period when omitted.',
+      'change paymentSummary (paid, partial, pending, overdue, ' +
+      'collectionPercentage) and revenueSummary (expected, collected, ' +
+      'remaining, collectionPercentage) to reflect that period instead of ' +
+      'the current one — summaryCards, upcomingPayments and recentActivity ' +
+      'still reflect the current billing period. Defaults to the current ' +
+      'billing period when omitted.',
   })
   @ApiQuery({
     name: 'billingMonth',
     required: false,
     description:
-      'Billing month (1-12) to compute revenueSummary for. Must be provided together with billingYear.',
+      'Billing month (1-12) to compute paymentSummary/revenueSummary for. Must be provided together with billingYear.',
   })
   @ApiQuery({
     name: 'billingYear',
     required: false,
     description:
-      'Billing year to compute revenueSummary for. Must be provided together with billingMonth.',
+      'Billing year to compute paymentSummary/revenueSummary for. Must be provided together with billingMonth.',
   })
   @ApiOkResponse({ type: DashboardResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
@@ -70,29 +72,29 @@ export class DashboardController {
       );
     }
 
-    let revenueBillingMonth: number | undefined;
-    let revenueBillingYear: number | undefined;
+    let selectedBillingMonth: number | undefined;
+    let selectedBillingYear: number | undefined;
 
     if (billingMonth !== undefined && billingYear !== undefined) {
-      revenueBillingMonth = parseInt(billingMonth, 10);
-      revenueBillingYear = parseInt(billingYear, 10);
+      selectedBillingMonth = parseInt(billingMonth, 10);
+      selectedBillingYear = parseInt(billingYear, 10);
 
       if (
-        !Number.isInteger(revenueBillingMonth) ||
-        revenueBillingMonth < 1 ||
-        revenueBillingMonth > 12
+        !Number.isInteger(selectedBillingMonth) ||
+        selectedBillingMonth < 1 ||
+        selectedBillingMonth > 12
       ) {
         throw new BadRequestException('billingMonth must be between 1 and 12');
       }
-      if (!Number.isInteger(revenueBillingYear)) {
+      if (!Number.isInteger(selectedBillingYear)) {
         throw new BadRequestException('billingYear must be a valid year');
       }
     }
 
     const data = await this.dashboardService.getDashboard(
       currentUser.companyId,
-      revenueBillingMonth,
-      revenueBillingYear,
+      selectedBillingMonth,
+      selectedBillingYear,
     );
     return plainToInstance(DashboardResponseDto, data, {
       excludeExtraneousValues: true,
