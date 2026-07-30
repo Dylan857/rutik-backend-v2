@@ -60,6 +60,18 @@ export class VehicleResponseDto {
   @Expose()
   currentMileage: number;
 
+  @ApiProperty({ example: true })
+  @Expose()
+  isPublicService: boolean;
+
+  @ApiPropertyOptional({ example: '2026-06-01', nullable: true })
+  @Expose()
+  lastBimonthlyInspectionDate: string | null;
+
+  @ApiPropertyOptional({ example: '2026-08-01', nullable: true })
+  @Expose()
+  bimonthlyInspectionExpirationDate: string | null;
+
   @ApiProperty({ enum: VehicleStatus, example: VehicleStatus.ACTIVE })
   @Expose()
   status: VehicleStatus;
