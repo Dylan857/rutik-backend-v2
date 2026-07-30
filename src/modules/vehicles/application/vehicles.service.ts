@@ -47,6 +47,11 @@ export class VehiclesService {
       technicalInspectionNumber: dto.technicalInspectionNumber,
       technicalInspectionExpirationDate: dto.technicalInspectionExpirationDate,
       currentMileage: dto.currentMileage ?? 0,
+      isPublicService: dto.isPublicService ?? true,
+      lastBimonthlyInspectionDate: dto.lastBimonthlyInspectionDate ?? null,
+      bimonthlyInspectionExpirationDate: dto.lastBimonthlyInspectionDate
+        ? this.calculateBimonthlyExpiration(dto.lastBimonthlyInspectionDate)
+        : null,
       status: dto.status,
       observations: dto.observations ?? null,
     });
@@ -94,7 +99,16 @@ export class VehiclesService {
       );
     }
 
-    return this.vehicleRepository.update(id, dto);
+    const updateData: Partial<Vehicle> = { ...dto };
+    if (
+      dto.lastBimonthlyInspectionDate !== undefined &&
+      dto.lastBimonthlyInspectionDate !== current.lastBimonthlyInspectionDate
+    ) {
+      updateData.bimonthlyInspectionExpirationDate =
+        this.calculateBimonthlyExpiration(dto.lastBimonthlyInspectionDate);
+    }
+
+    return this.vehicleRepository.update(id, updateData);
   }
 
   async softDelete(id: string): Promise<void> {
@@ -153,5 +167,11 @@ export class VehiclesService {
         `Technical inspection expiration date "${technicalInspectionExpirationDate}" must be a future date`,
       );
     }
+  }
+
+  private calculateBimonthlyExpiration(lastInspectionDate: string): string {
+    const date = new Date(`${lastInspectionDate.slice(0, 10)}T00:00:00`);
+    date.setMonth(date.getMonth() + 2);
+    return date.toISOString().slice(0, 10);
   }
 }

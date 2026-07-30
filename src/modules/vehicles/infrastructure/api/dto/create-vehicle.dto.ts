@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -121,6 +122,25 @@ export class CreateVehicleDto {
   @Min(0)
   @IsOptional()
   currentMileage?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Whether the vehicle is a public-service vehicle (subject to the bimonthly technical inspection). Defaults to true.',
+    default: true,
+  })
+  @IsBoolean()
+  @IsOptional()
+  isPublicService?: boolean;
+
+  @ApiPropertyOptional({
+    example: '2026-06-01',
+    description:
+      'Date of the last bimonthly preventive inspection. Only relevant for public-service vehicles; the expiration date is calculated by the backend as this date + 2 months.',
+  })
+  @IsDateString()
+  @IsOptional()
+  lastBimonthlyInspectionDate?: string;
 
   @ApiPropertyOptional({ enum: VehicleStatus, default: VehicleStatus.ACTIVE })
   @IsEnum(VehicleStatus)

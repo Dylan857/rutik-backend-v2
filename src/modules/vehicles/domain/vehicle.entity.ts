@@ -53,6 +53,25 @@ export class Vehicle extends BaseEntity {
   @Column({ name: 'current_mileage', type: 'int', default: 0 })
   currentMileage: number;
 
+  @Column({ name: 'is_public_service', type: 'boolean', default: true })
+  isPublicService: boolean;
+
+  @Column({
+    name: 'last_bimonthly_inspection_date',
+    type: 'date',
+    nullable: true,
+    default: null,
+  })
+  lastBimonthlyInspectionDate: string | null;
+
+  @Column({
+    name: 'bimonthly_inspection_expiration_date',
+    type: 'date',
+    nullable: true,
+    default: null,
+  })
+  bimonthlyInspectionExpirationDate: string | null;
+
   @Column({ type: 'enum', enum: VehicleStatus, default: VehicleStatus.ACTIVE })
   status: VehicleStatus;
 
