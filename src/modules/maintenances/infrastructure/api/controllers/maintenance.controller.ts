@@ -1,0 +1,183 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
+import { plainToInstance } from 'class-transformer';
+import { MaintenancesService } from '../../../application/maintenances.service';
+import { CreateMaintenanceDto } from '../dto/create-maintenance.dto';
+import { UpdateMaintenanceDto } from '../dto/update-maintenance.dto';
+import { MaintenanceResponseDto } from '../dto/maintenance-response.dto';
+import { MaintenanceSummaryResponseDto } from '../dto/maintenance-summary-response.dto';
+
+@ApiTags('Maintenances')
+@Controller('maintenances')
+export class MaintenanceController {
+  constructor(private readonly maintenancesService: MaintenancesService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Register a maintenance for a vehicle',
+    description:
+      'Records that a maintenance was performed on a vehicle. companyId is ' +
+      'derived from the vehicle automatically. If mileage exceeds the ' +
+      "vehicle's currentMileage, the vehicle record is updated to match.",
+  })
+  @ApiCreatedResponse({ type: MaintenanceResponseDto })
+  @ApiNotFoundResponse({ description: 'Vehicle not found' })
+  @ApiBadRequestResponse({
+    description:
+      'Maintenance date cannot be in the future, or next maintenance ' +
+      'date/mileage is not coherent with the current record',
+  })
+  async create(
+    @Body() dto: CreateMaintenanceDto,
+  ): Promise<MaintenanceResponseDto> {
+    const maintenance = await this.maintenancesService.create(dto);
+    return plainToInstance(MaintenanceResponseDto, maintenance, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'List maintenances with optional filters' })
+  @ApiOkResponse({ type: [MaintenanceResponseDto] })
+  @ApiQuery({
+    name: 'companyId',
+    required: false,
+    description: 'Filter by company UUID',
+  })
+  @ApiQuery({
+    name: 'vehicleId',
+    required: false,
+    description: 'Filter by vehicle UUID',
+  })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Filter by month (1-12)',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    description: 'Filter by year',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description:
+      'Search across vehicle plate/brand/model, workshop and description',
+  })
+  async findAll(
+    @Query('companyId') companyId?: string,
+    @Query('vehicleId') vehicleId?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+    @Query('search') search?: string,
+  ): Promise<MaintenanceResponseDto[]> {
+    const maintenances = await this.maintenancesService.findAll({
+      companyId,
+      vehicleId,
+      month: month !== undefined ? Number(month) : undefined,
+      year: year !== undefined ? Number(year) : undefined,
+      search,
+    });
+    return plainToInstance(MaintenanceResponseDto, maintenances, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('summary')
+  @ApiOperation({
+    summary: 'Get maintenance dashboard summary cards for a billing period',
+  })
+  @ApiOkResponse({ type: MaintenanceSummaryResponseDto })
+  @ApiQuery({ name: 'companyId', required: true, description: 'Company UUID' })
+  @ApiQuery({
+    name: 'month',
+    required: false,
+    description: 'Month (1-12), defaults to current month',
+  })
+  @ApiQuery({
+    name: 'year',
+    required: false,
+    description: 'Year, defaults to current year',
+  })
+  async getSummary(
+    @Query('companyId') companyId: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+  ): Promise<MaintenanceSummaryResponseDto> {
+    const summary = await this.maintenancesService.getSummary(
+      companyId,
+      month !== undefined ? Number(month) : undefined,
+      year !== undefined ? Number(year) : undefined,
+    );
+    return plainToInstance(MaintenanceSummaryResponseDto, summary, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a maintenance by ID' })
+  @ApiOkResponse({ type: MaintenanceResponseDto })
+  @ApiNotFoundResponse({ description: 'Maintenance not found' })
+  async findById(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<MaintenanceResponseDto> {
+    const maintenance = await this.maintenancesService.findById(id);
+    return plainToInstance(MaintenanceResponseDto, maintenance, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary: 'Update a maintenance',
+    description: 'Updates maintenance fields. vehicleId is immutable.',
+  })
+  @ApiOkResponse({ type: MaintenanceResponseDto })
+  @ApiNotFoundResponse({ description: 'Maintenance not found' })
+  @ApiBadRequestResponse({
+    description:
+      'Maintenance date cannot be in the future, or next maintenance ' +
+      'date/mileage is not coherent with the current record',
+  })
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateMaintenanceDto,
+  ): Promise<MaintenanceResponseDto> {
+    const maintenance = await this.maintenancesService.update(id, dto);
+    return plainToInstance(MaintenanceResponseDto, maintenance, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a maintenance' })
+  @ApiNoContentResponse({ description: 'Maintenance deleted successfully' })
+  @ApiNotFoundResponse({ description: 'Maintenance not found' })
+  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.maintenancesService.softDelete(id);
+  }
+}
