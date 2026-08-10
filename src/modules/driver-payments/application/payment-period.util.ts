@@ -68,7 +68,10 @@ function cutoffForType(date: Date, paymentType: PaymentType): Date {
  * a Friday) rolls into the following Monday, skipping the weekend so every
  * period after the first stays aligned to a clean Mon-Fri work week.
  */
-function nextPeriodStart(previousPeriodEnd: Date, paymentType: PaymentType): Date {
+function nextPeriodStart(
+  previousPeriodEnd: Date,
+  paymentType: PaymentType,
+): Date {
   return addDays(previousPeriodEnd, paymentType === PaymentType.WEEKLY ? 3 : 1);
 }
 
@@ -92,7 +95,10 @@ export function advancePeriod(
   paymentType: PaymentType,
   lastPeriod: PaymentPeriod,
 ): PaymentPeriod {
-  const start = nextPeriodStart(parseDateOnly(lastPeriod.periodEnd), paymentType);
+  const start = nextPeriodStart(
+    parseDateOnly(lastPeriod.periodEnd),
+    paymentType,
+  );
   const end = cutoffForType(start, paymentType);
   return { periodStart: formatDateOnly(start), periodEnd: formatDateOnly(end) };
 }

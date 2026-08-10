@@ -51,7 +51,7 @@ describe('payment-period.util', () => {
       });
     });
 
-    it('WEEKLY: hired on a Monday -> cutoff is that same week\'s Friday (full 5-day week)', () => {
+    it("WEEKLY: hired on a Monday -> cutoff is that same week's Friday (full 5-day week)", () => {
       // 2026-07-06 is a Monday
       expect(computeFirstPeriod('2026-07-06', PaymentType.WEEKLY)).toEqual({
         periodStart: '2026-07-06',
@@ -72,25 +72,40 @@ describe('payment-period.util', () => {
     it('MONTHLY: every subsequent period is a full calendar month, independent of hireDate', () => {
       const first = computeFirstPeriod('2026-07-07', PaymentType.MONTHLY);
       const second = advancePeriod(PaymentType.MONTHLY, first);
-      expect(second).toEqual({ periodStart: '2026-08-01', periodEnd: '2026-08-31' });
+      expect(second).toEqual({
+        periodStart: '2026-08-01',
+        periodEnd: '2026-08-31',
+      });
 
       const third = advancePeriod(PaymentType.MONTHLY, second);
-      expect(third).toEqual({ periodStart: '2026-09-01', periodEnd: '2026-09-30' });
+      expect(third).toEqual({
+        periodStart: '2026-09-01',
+        periodEnd: '2026-09-30',
+      });
     });
 
     it('BIWEEKLY: alternates cleanly between the 1-15 and 16-end quincenas', () => {
       const first = computeFirstPeriod('2026-07-03', PaymentType.BIWEEKLY); // ends 2026-07-15
       const second = advancePeriod(PaymentType.BIWEEKLY, first);
-      expect(second).toEqual({ periodStart: '2026-07-16', periodEnd: '2026-07-31' });
+      expect(second).toEqual({
+        periodStart: '2026-07-16',
+        periodEnd: '2026-07-31',
+      });
 
       const third = advancePeriod(PaymentType.BIWEEKLY, second);
-      expect(third).toEqual({ periodStart: '2026-08-01', periodEnd: '2026-08-15' });
+      expect(third).toEqual({
+        periodStart: '2026-08-01',
+        periodEnd: '2026-08-15',
+      });
     });
 
     it('WEEKLY: advances to the next Monday-Friday week, skipping the weekend', () => {
       const first = computeFirstPeriod('2026-07-08', PaymentType.WEEKLY); // ends Friday 2026-07-10
       const second = advancePeriod(PaymentType.WEEKLY, first);
-      expect(second).toEqual({ periodStart: '2026-07-13', periodEnd: '2026-07-17' });
+      expect(second).toEqual({
+        periodStart: '2026-07-13',
+        periodEnd: '2026-07-17',
+      });
     });
 
     it('MONTHLY: two drivers hired on different days converge to identical periods from the second period on', () => {
@@ -103,7 +118,10 @@ describe('payment-period.util', () => {
         computeFirstPeriod('2026-07-29', PaymentType.MONTHLY),
       );
       expect(driverA).toEqual(driverB);
-      expect(driverA).toEqual({ periodStart: '2026-08-01', periodEnd: '2026-08-31' });
+      expect(driverA).toEqual({
+        periodStart: '2026-08-01',
+        periodEnd: '2026-08-31',
+      });
     });
   });
 
@@ -148,7 +166,12 @@ describe('payment-period.util', () => {
     it('WEEKLY: opens the current Mon-Fri week before Friday arrives, same as the other frequencies', () => {
       const hireDate = '2026-07-08'; // Wednesday, cutoff is Friday 2026-07-10
       expect(
-        resolveNextPeriodForDriver(hireDate, PaymentType.WEEKLY, null, new Date(2026, 6, 9)), // Thursday
+        resolveNextPeriodForDriver(
+          hireDate,
+          PaymentType.WEEKLY,
+          null,
+          new Date(2026, 6, 9),
+        ), // Thursday
       ).toEqual({ periodStart: '2026-07-08', periodEnd: '2026-07-10' });
     });
 

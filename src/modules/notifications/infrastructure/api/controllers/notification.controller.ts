@@ -49,7 +49,7 @@ export class NotificationController {
     description:
       'Normally runs once a day on a schedule. Forces it to run now, ' +
       'across every company — useful right after registering a vehicle ' +
-      "whose documents are already within the alert window. Safe to run " +
+      'whose documents are already within the alert window. Safe to run ' +
       'more than once: notifications already created for a given ' +
       'vehicle/document/expiration-date are skipped.',
   })
