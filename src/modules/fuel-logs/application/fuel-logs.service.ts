@@ -72,6 +72,14 @@ export class FuelLogsService {
     await this.fuelLogRepository.softDelete(id);
   }
 
+  getTotalExpenses(
+    companyId: string,
+    month: number,
+    year: number,
+  ): Promise<number> {
+    return this.fuelLogRepository.getTotalAmount(companyId, month, year);
+  }
+
   // ── Private helpers ──────────────────────────────────────────────────────────
 
   private assertDateNotFuture(date: string): void {
