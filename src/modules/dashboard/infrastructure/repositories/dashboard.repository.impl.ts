@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Student } from '../../../students/domain/student.entity';
+import { StudentStatus } from '../../../students/domain/enums/student-status.enum';
 import { School } from '../../../school/domain/school.entity';
 import { Vehicle } from '../../../vehicles/domain/vehicle.entity';
 import { SchoolRoute } from '../../../school-routes/domain/school-route.entity';
@@ -55,11 +56,17 @@ export class DashboardRepositoryImpl implements IDashboardRepository {
   ): Promise<PaymentStatusCounts> {
     const rows = await this.paymentRepository
       .createQueryBuilder('payment')
+      // Inner-joined so a deleted or deactivated student's payment records
+      // never inflate these counts — see getPaymentAmountTotals below.
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
       .select(DashboardRepositoryImpl.STATUS_CASE, 'status')
       .addSelect('COUNT(*)', 'count')
       .where('payment.companyId = :companyId', { companyId })
       .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
       .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .andWhere('student.status = :activeStatus', {
+        activeStatus: StudentStatus.ACTIVE,
+      })
       // Group by the CASE expression itself, not the "status" alias — the
       // table also has a real (and possibly stale, see STATUS_CASE comment)
       // `status` column, so `GROUP BY status` resolves to that column instead
@@ -96,11 +103,18 @@ export class DashboardRepositoryImpl implements IDashboardRepository {
   ): Promise<PaymentAmountTotals> {
     const raw = await this.paymentRepository
       .createQueryBuilder('payment')
+      // Same join/status-filter as getPaymentStatusCounts, for the same
+      // reason: a deleted or deactivated student's payment shouldn't count
+      // toward expected/collected totals.
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
       .select('COALESCE(SUM(payment.monthlyFee), 0)', 'expected')
       .addSelect('COALESCE(SUM(payment.amountPaid), 0)', 'collected')
       .where('payment.companyId = :companyId', { companyId })
       .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
       .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .andWhere('student.status = :activeStatus', {
+        activeStatus: StudentStatus.ACTIVE,
+      })
       .getRawOne<{ expected: string; collected: string }>();
 
     return {

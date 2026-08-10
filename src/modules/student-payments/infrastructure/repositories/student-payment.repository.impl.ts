@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { LessThan, Repository } from 'typeorm';
+import { StudentStatus } from '../../../students/domain/enums/student-status.enum';
 import { StudentPayment } from '../../domain/student-payment.entity';
 import { PaymentStatus } from '../../domain/enums/payment-status.enum';
 import { PAYMENT_STATUS_CASE } from '../../domain/payment-status-case.sql';
@@ -64,19 +65,23 @@ export class StudentPaymentRepositoryImpl implements IStudentPaymentRepository {
     billingYear: number,
     schoolId?: string,
   ): Promise<PaymentStatusCounts> {
+    // Inner-joined unconditionally (not just when schoolId is given) so a
+    // deleted or deactivated student's payment records never inflate these
+    // counts — see getPaymentAmountTotals for the matching totals query.
     const qb = this.repository
       .createQueryBuilder('payment')
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
       .select(PAYMENT_STATUS_CASE, 'status')
       .addSelect('COUNT(*)', 'count')
       .where('payment.companyId = :companyId', { companyId })
       .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
-      .andWhere('payment.billingYear = :billingYear', { billingYear });
+      .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .andWhere('student.status = :activeStatus', {
+        activeStatus: StudentStatus.ACTIVE,
+      });
 
     if (schoolId) {
-      qb.innerJoin('payment.student', 'student').andWhere(
-        'student.schoolId = :schoolId',
-        { schoolId },
-      );
+      qb.andWhere('student.schoolId = :schoolId', { schoolId });
     }
 
     // Group by the CASE expression itself, not the "status" alias — see
@@ -113,19 +118,23 @@ export class StudentPaymentRepositoryImpl implements IStudentPaymentRepository {
     billingYear: number,
     schoolId?: string,
   ): Promise<PaymentAmountTotals> {
+    // Same join/status-filter as getPaymentStatusCounts, for the same reason:
+    // a deleted or deactivated student's payment shouldn't count toward
+    // expected/collected totals.
     const qb = this.repository
       .createQueryBuilder('payment')
+      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
       .select('COALESCE(SUM(payment.monthlyFee), 0)', 'expected')
       .addSelect('COALESCE(SUM(payment.amountPaid), 0)', 'collected')
       .where('payment.companyId = :companyId', { companyId })
       .andWhere('payment.billingMonth = :billingMonth', { billingMonth })
-      .andWhere('payment.billingYear = :billingYear', { billingYear });
+      .andWhere('payment.billingYear = :billingYear', { billingYear })
+      .andWhere('student.status = :activeStatus', {
+        activeStatus: StudentStatus.ACTIVE,
+      });
 
     if (schoolId) {
-      qb.innerJoin('payment.student', 'student').andWhere(
-        'student.schoolId = :schoolId',
-        { schoolId },
-      );
+      qb.andWhere('student.schoolId = :schoolId', { schoolId });
     }
 
     const raw = await qb.getRawOne<{ expected: string; collected: string }>();
