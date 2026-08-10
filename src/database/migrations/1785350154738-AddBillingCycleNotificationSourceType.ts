@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddBillingCycleNotificationSourceType1785350154738
-  implements MigrationInterface
-{
+export class AddBillingCycleNotificationSourceType1785350154738 implements MigrationInterface {
   name = 'AddBillingCycleNotificationSourceType1785350154738';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
