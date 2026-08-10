@@ -22,6 +22,7 @@ import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interfa
 import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { DashboardService } from '../../../application/dashboard.service';
 import { DashboardResponseDto } from '../dto/dashboard-response.dto';
+import { ProfitSummaryResponseDto } from '../dto/profit-summary-response.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth('access-token')
@@ -62,42 +63,93 @@ export class DashboardController {
     @Query('billingMonth') billingMonth?: string,
     @Query('billingYear') billingYear?: string,
   ): Promise<DashboardResponseDto> {
+    const companyId = this.requireCompanyId(currentUser);
+    const period = this.parseBillingPeriod(billingMonth, billingYear);
+
+    const data = await this.dashboardService.getDashboard(
+      companyId,
+      period?.month,
+      period?.year,
+    );
+    return plainToInstance(DashboardResponseDto, data, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Get('profit-summary')
+  @ApiOperation({
+    summary:
+      'Get the profit summary (income, expenses, profit, margin) for a billing period',
+    description:
+      'billingMonth/billingYear are optional and, when both are provided, ' +
+      'change which billing period the summary is computed for. Defaults to ' +
+      'the current billing period when omitted.',
+  })
+  @ApiQuery({
+    name: 'billingMonth',
+    required: false,
+    description:
+      'Billing month (1-12) to compute the summary for. Must be provided together with billingYear.',
+  })
+  @ApiQuery({
+    name: 'billingYear',
+    required: false,
+    description:
+      'Billing year to compute the summary for. Must be provided together with billingMonth.',
+  })
+  @ApiOkResponse({ type: ProfitSummaryResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async getProfitSummary(
+    @CurrentUser() currentUser: JwtPayload,
+    @Query('billingMonth') billingMonth?: string,
+    @Query('billingYear') billingYear?: string,
+  ): Promise<ProfitSummaryResponseDto> {
+    const companyId = this.requireCompanyId(currentUser);
+    const period = this.parseBillingPeriod(billingMonth, billingYear);
+
+    const data = await this.dashboardService.getProfitSummary(
+      companyId,
+      period?.month,
+      period?.year,
+    );
+    return plainToInstance(ProfitSummaryResponseDto, data, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────
+
+  private requireCompanyId(currentUser: JwtPayload): string {
     if (!currentUser.companyId) {
       throw new BadRequestException('User is not associated with a company');
     }
+    return currentUser.companyId;
+  }
 
+  private parseBillingPeriod(
+    billingMonth?: string,
+    billingYear?: string,
+  ): { month: number; year: number } | undefined {
     if ((billingMonth === undefined) !== (billingYear === undefined)) {
       throw new BadRequestException(
         'billingMonth and billingYear must be provided together',
       );
     }
 
-    let selectedBillingMonth: number | undefined;
-    let selectedBillingYear: number | undefined;
-
-    if (billingMonth !== undefined && billingYear !== undefined) {
-      selectedBillingMonth = parseInt(billingMonth, 10);
-      selectedBillingYear = parseInt(billingYear, 10);
-
-      if (
-        !Number.isInteger(selectedBillingMonth) ||
-        selectedBillingMonth < 1 ||
-        selectedBillingMonth > 12
-      ) {
-        throw new BadRequestException('billingMonth must be between 1 and 12');
-      }
-      if (!Number.isInteger(selectedBillingYear)) {
-        throw new BadRequestException('billingYear must be a valid year');
-      }
+    if (billingMonth === undefined || billingYear === undefined) {
+      return undefined;
     }
 
-    const data = await this.dashboardService.getDashboard(
-      currentUser.companyId,
-      selectedBillingMonth,
-      selectedBillingYear,
-    );
-    return plainToInstance(DashboardResponseDto, data, {
-      excludeExtraneousValues: true,
-    });
+    const month = parseInt(billingMonth, 10);
+    const year = parseInt(billingYear, 10);
+
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new BadRequestException('billingMonth must be between 1 and 12');
+    }
+    if (!Number.isInteger(year)) {
+      throw new BadRequestException('billingYear must be a valid year');
+    }
+
+    return { month, year };
   }
 }

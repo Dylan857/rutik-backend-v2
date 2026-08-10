@@ -50,4 +50,20 @@ export class FuelLogRepositoryImpl implements IFuelLogRepository {
   async softDelete(id: string): Promise<void> {
     await this.repository.softDelete(id);
   }
+
+  async getTotalAmount(
+    companyId: string,
+    month: number,
+    year: number,
+  ): Promise<number> {
+    const raw = await this.repository
+      .createQueryBuilder('fuelLog')
+      .select('COALESCE(SUM(fuelLog.amountPaid), 0)', 'total')
+      .where('fuelLog.companyId = :companyId', { companyId })
+      .andWhere('EXTRACT(MONTH FROM fuelLog.date) = :month', { month })
+      .andWhere('EXTRACT(YEAR FROM fuelLog.date) = :year', { year })
+      .getRawOne<{ total: string }>();
+
+    return parseFloat(raw?.total ?? '0');
+  }
 }

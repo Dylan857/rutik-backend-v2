@@ -34,7 +34,7 @@ async function bootstrap() {
   await app.listen(port);
 
   const appUrl = `http://localhost:${port}/${apiPrefix}`;
-  console.log(`Application running on: ${appUrl}`);   
+  console.log(`Application running on: ${appUrl}`);
   console.log(`Swagger docs available at: ${appUrl}/docs`);
 }
 

@@ -44,7 +44,8 @@ export class SchoolRouteResponseDto {
 
   @ApiProperty({
     example: '_ibE_seK_seK_seK',
-    description: 'Encoded Google polyline for the return (drop-off) leg, if computed',
+    description:
+      'Encoded Google polyline for the return (drop-off) leg, if computed',
     nullable: true,
   })
   @Expose()

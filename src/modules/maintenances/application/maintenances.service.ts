@@ -197,6 +197,19 @@ export class MaintenancesService {
     };
   }
 
+  async getTotalExpenses(
+    companyId: string,
+    month: number,
+    year: number,
+  ): Promise<number> {
+    const { totalInvested } = await this.maintenanceRepository.getSummaryTotals(
+      companyId,
+      month,
+      year,
+    );
+    return totalInvested;
+  }
+
   // ── Private helpers ──────────────────────────────────────────────────────────
 
   private toResponseShape(maintenance: Maintenance): MaintenanceWithStatus {

@@ -54,9 +54,10 @@ export class VehicleDetailService {
       this.vehicleDetailRepository.getActiveRoutes(id),
     ]);
 
-    const assignedStudents = await this.vehicleDetailRepository.getAssignedStudents(
-      activeRoutes.map((route) => route.id),
-    );
+    const assignedStudents =
+      await this.vehicleDetailRepository.getAssignedStudents(
+        activeRoutes.map((route) => route.id),
+      );
 
     return {
       vehicle,
@@ -73,10 +74,20 @@ export class VehicleDetailService {
     const resolvedMonth = month ?? now.getMonth() + 1;
     const resolvedYear = year ?? now.getFullYear();
 
-    if (!Number.isInteger(resolvedMonth) || resolvedMonth < 1 || resolvedMonth > 12) {
-      throw new BadRequestException('month must be an integer between 1 and 12');
+    if (
+      !Number.isInteger(resolvedMonth) ||
+      resolvedMonth < 1 ||
+      resolvedMonth > 12
+    ) {
+      throw new BadRequestException(
+        'month must be an integer between 1 and 12',
+      );
     }
-    if (!Number.isInteger(resolvedYear) || resolvedYear < 2000 || resolvedYear > now.getFullYear() + 1) {
+    if (
+      !Number.isInteger(resolvedYear) ||
+      resolvedYear < 2000 ||
+      resolvedYear > now.getFullYear() + 1
+    ) {
       throw new BadRequestException(`year "${resolvedYear}" is out of range`);
     }
 

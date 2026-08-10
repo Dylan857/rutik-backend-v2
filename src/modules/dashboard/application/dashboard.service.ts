@@ -8,6 +8,11 @@ import {
   SummaryCounts,
   UpcomingPaymentRecord,
 } from '../domain/interfaces/dashboard.repository';
+import {
+  EXPENSE_CATEGORY_PROVIDERS,
+  ExpenseCategoryTotal,
+  IExpenseCategoryProvider,
+} from '../domain/interfaces/expense-category-provider';
 
 // "Próximo a vencer" window for the upcomingPayments section.
 const UPCOMING_PAYMENTS_WINDOW_DAYS = 5;
@@ -34,11 +39,23 @@ export interface DashboardData {
   recentActivity: RecentPaymentActivityRecord[];
 }
 
+export interface ProfitSummaryData {
+  income: number;
+  expenses: number;
+  profit: number;
+  margin: number;
+  fuelExpenses: number;
+  maintenanceExpenses: number;
+  expenseBreakdown: ExpenseCategoryTotal[];
+}
+
 @Injectable()
 export class DashboardService {
   constructor(
     @Inject(DASHBOARD_REPOSITORY)
     private readonly dashboardRepository: IDashboardRepository,
+    @Inject(EXPENSE_CATEGORY_PROVIDERS)
+    private readonly expenseCategoryProviders: IExpenseCategoryProvider[],
   ) {}
 
   async getDashboard(
@@ -70,6 +87,44 @@ export class DashboardService {
       revenueSummary,
       upcomingPayments,
       recentActivity,
+    };
+  }
+
+  async getProfitSummary(
+    companyId: string,
+    selectedBillingMonth?: number,
+    selectedBillingYear?: number,
+  ): Promise<ProfitSummaryData> {
+    const { billingMonth, billingYear } = this.getCurrentBillingPeriod();
+    const periodMonth = selectedBillingMonth ?? billingMonth;
+    const periodYear = selectedBillingYear ?? billingYear;
+
+    const [{ collected: income }, expenseBreakdown] = await Promise.all([
+      this.dashboardRepository.getPaymentAmountTotals(
+        companyId,
+        periodMonth,
+        periodYear,
+      ),
+      this.getExpenseBreakdown(companyId, periodMonth, periodYear),
+    ]);
+
+    const expenses = expenseBreakdown.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const profit = income - expenses;
+
+    return {
+      income,
+      expenses,
+      profit,
+      margin: this.calculatePercentage(profit, income),
+      fuelExpenses: this.findCategoryAmount(expenseBreakdown, 'fuel'),
+      maintenanceExpenses: this.findCategoryAmount(
+        expenseBreakdown,
+        'maintenance',
+      ),
+      expenseBreakdown,
     };
   }
 
@@ -158,5 +213,26 @@ export class DashboardService {
   private calculatePercentage(part: number, total: number): number {
     if (total <= 0) return 0;
     return Math.round((part / total) * 10000) / 100;
+  }
+
+  private async getExpenseBreakdown(
+    companyId: string,
+    month: number,
+    year: number,
+  ): Promise<ExpenseCategoryTotal[]> {
+    return Promise.all(
+      this.expenseCategoryProviders.map(async (provider) => ({
+        category: provider.category,
+        label: provider.label,
+        amount: await provider.getTotal(companyId, month, year),
+      })),
+    );
+  }
+
+  private findCategoryAmount(
+    breakdown: ExpenseCategoryTotal[],
+    category: string,
+  ): number {
+    return breakdown.find((item) => item.category === category)?.amount ?? 0;
   }
 }

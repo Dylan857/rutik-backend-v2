@@ -24,7 +24,7 @@ export class RouteStopResponseDto {
     example: 3,
     description:
       'Pickup (ida) order within the route (1-based, ascending). ' +
-      'Null if the student\'s tripType is DROPOFF_ONLY.',
+      "Null if the student's tripType is DROPOFF_ONLY.",
     nullable: true,
   })
   @Expose()
@@ -34,7 +34,7 @@ export class RouteStopResponseDto {
     example: 2,
     description:
       'Dropoff (regreso) order within the route (1-based, ascending), ' +
-      'computed independently from stopOrder. Null if the student\'s ' +
+      "computed independently from stopOrder. Null if the student's " +
       'tripType is PICKUP_ONLY.',
     nullable: true,
   })

@@ -29,7 +29,10 @@ export class FuelSummaryDto {
   @Type(() => FuelPeriodDto)
   period: FuelPeriodDto;
 
-  @ApiProperty({ example: 450000, description: 'Sum of amountPaid for the period' })
+  @ApiProperty({
+    example: 450000,
+    description: 'Sum of amountPaid for the period',
+  })
   @Expose()
   totalAmountPaid: number;
 

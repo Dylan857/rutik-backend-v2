@@ -192,9 +192,7 @@ export class RouteStopsService {
       stops,
     );
 
-    const pickupIndex = new Map(
-      pickupOrder.map((stop, i) => [stop.id, i + 1]),
-    );
+    const pickupIndex = new Map(pickupOrder.map((stop, i) => [stop.id, i + 1]));
     const dropoffIndex = new Map(
       dropoffOrder.map((stop, i) => [stop.id, i + 1]),
     );
@@ -254,8 +252,14 @@ export class RouteStopsService {
       };
     }
 
-    const companyPoint: LatLng = { lat: company.latitude!, lng: company.longitude! };
-    const schoolPoint: LatLng = { lat: school.latitude!, lng: school.longitude! };
+    const companyPoint: LatLng = {
+      lat: company.latitude!,
+      lng: company.longitude!,
+    };
+    const schoolPoint: LatLng = {
+      lat: school.latitude!,
+      lng: school.longitude!,
+    };
 
     const pickup = await this.computeLegOrder(
       routeId,
@@ -288,7 +292,8 @@ export class RouteStopsService {
     if (dropoff.directions) {
       directionsCache.polylineReturn = dropoff.directions.polyline;
       directionsCache.distanceMetersReturn = dropoff.directions.distanceMeters;
-      directionsCache.durationSecondsReturn = dropoff.directions.durationSeconds;
+      directionsCache.durationSecondsReturn =
+        dropoff.directions.durationSeconds;
       hasFreshDirections = true;
     }
 

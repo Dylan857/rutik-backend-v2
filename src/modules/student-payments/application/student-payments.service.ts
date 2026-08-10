@@ -114,6 +114,7 @@ export class StudentPaymentsService {
       student.paymentDueDay,
     );
     const amountPaid = dto.amountPaid ?? 0;
+    this.assertAmountPaidNotExceedingFee(dto.monthlyFee, amountPaid);
     const computed = this.deriveComputedFields({
       monthlyFee: dto.monthlyFee,
       amountPaid,
@@ -167,6 +168,7 @@ export class StudentPaymentsService {
 
     const monthlyFee = dto.monthlyFee ?? current.monthlyFee;
     const amountPaid = dto.amountPaid ?? current.amountPaid;
+    this.assertAmountPaidNotExceedingFee(monthlyFee, amountPaid);
     // dueDate is frozen at creation (mirrors monthlyFee's historical-integrity
     // precedent) — an update never recomputes it, even if the student's
     // paymentDueDay preference changes later.
@@ -485,6 +487,23 @@ export class StudentPaymentsService {
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * amountPaid must never exceed monthlyFee — an overpayment isn't a valid
+   * "PAID" state, it's a data-entry mistake (deriveComputedFields already
+   * treats amountPaid >= monthlyFee as PAID, so silently accepting more would
+   * hide the excess instead of rejecting it).
+   */
+  private assertAmountPaidNotExceedingFee(
+    monthlyFee: number,
+    amountPaid: number,
+  ): void {
+    if (amountPaid > monthlyFee) {
+      throw new BadRequestException(
+        `amountPaid (${amountPaid}) cannot exceed monthlyFee (${monthlyFee})`,
+      );
+    }
+  }
 
   /**
    * Single source of truth for status/paidAt/outstandingBalance/daysOverdue.

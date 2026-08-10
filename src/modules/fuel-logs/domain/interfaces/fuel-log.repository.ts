@@ -15,6 +15,13 @@ export interface IFuelLogRepository {
   findById(id: string): Promise<FuelLog | null>;
   update(id: string, data: Partial<FuelLog>): Promise<FuelLog>;
   softDelete(id: string): Promise<void>;
+  // Sum of amountPaid for a given billing month/year — backs the dashboard's
+  // fuel expense category.
+  getTotalAmount(
+    companyId: string,
+    month: number,
+    year: number,
+  ): Promise<number>;
 }
 
 export const FUEL_LOG_REPOSITORY = Symbol('FUEL_LOG_REPOSITORY');
