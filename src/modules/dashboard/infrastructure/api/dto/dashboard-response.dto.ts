@@ -5,6 +5,7 @@ import { PaymentSummaryDto } from './payment-summary.dto';
 import { RevenueSummaryDto } from './revenue-summary.dto';
 import { UpcomingPaymentDto } from './upcoming-payments.dto';
 import { RecentActivityDto } from './recent-activity.dto';
+import { ProfitHistoryItemDto } from './profit-history-item.dto';
 
 export class DashboardResponseDto {
   @ApiProperty({ type: SummaryCardsDto })
@@ -31,4 +32,9 @@ export class DashboardResponseDto {
   @Expose()
   @Type(() => RecentActivityDto)
   recentActivity: RecentActivityDto[];
+
+  @ApiProperty({ type: [ProfitHistoryItemDto] })
+  @Expose()
+  @Type(() => ProfitHistoryItemDto)
+  profitHistory: ProfitHistoryItemDto[];
 }
