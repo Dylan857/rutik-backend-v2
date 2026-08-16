@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -20,8 +22,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { StudentService } from '../../../application/students.service';
 import { StudentStatus } from '../../../domain/enums/student-status.enum';
 import { CreateStudentDto } from '../dto/create-student.dto';
@@ -35,6 +41,8 @@ export class StudentController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Enroll a new student' })
   @ApiCreatedResponse({ type: StudentResponseDto })
   @ApiNotFoundResponse({
@@ -44,8 +52,15 @@ export class StudentController {
     description:
       'School not in company, schedule not in school, or missing coordinates',
   })
-  async create(@Body() dto: CreateStudentDto): Promise<StudentResponseDto> {
-    const student = await this.studentService.create(dto);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateStudentDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<StudentResponseDto> {
+    const student = await this.studentService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(StudentResponseDto, student, {
       excludeExtraneousValues: true,
     });
@@ -113,17 +128,24 @@ export class StudentController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a student' })
   @ApiOkResponse({ type: StudentResponseDto })
   @ApiNotFoundResponse({ description: 'Student not found' })
   @ApiBadRequestResponse({
     description: "New schedule does not belong to student's school",
   })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStudentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<StudentResponseDto> {
-    const student = await this.studentService.update(id, dto);
+    const student = await this.studentService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(StudentResponseDto, student, {
       excludeExtraneousValues: true,
     });
@@ -131,10 +153,19 @@ export class StudentController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a student' })
   @ApiNoContentResponse({ description: 'Student deactivated successfully' })
   @ApiNotFoundResponse({ description: 'Student not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.studentService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.studentService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

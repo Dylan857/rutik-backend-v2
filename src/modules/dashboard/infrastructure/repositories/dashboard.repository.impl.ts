@@ -14,7 +14,6 @@ import {
   IDashboardRepository,
   PaymentAmountTotals,
   PaymentStatusCounts,
-  RecentPaymentActivityRecord,
   SummaryCounts,
   UpcomingPaymentRecord,
 } from '../../domain/interfaces/dashboard.repository';
@@ -189,44 +188,6 @@ export class DashboardRepositoryImpl implements IDashboardRepository {
       dueDate: row.dueDate,
       daysRemaining: parseInt(row.daysRemaining, 10),
       status: row.status,
-    }));
-  }
-
-  async getRecentPaymentActivity(
-    companyId: string,
-    limit: number,
-  ): Promise<RecentPaymentActivityRecord[]> {
-    const rows = await this.paymentRepository
-      .createQueryBuilder('payment')
-      .innerJoin('payment.student', 'student', 'student.deletedAt IS NULL')
-      .innerJoin('student.school', 'school', 'school.deletedAt IS NULL')
-      .select('payment.id', 'id')
-      .addSelect('payment.amountPaid', 'amount')
-      .addSelect('payment.paymentMethod', 'paymentMethod')
-      .addSelect('payment.paidAt', 'paidAt')
-      .addSelect("student.firstName || ' ' || student.lastName", 'studentName')
-      .addSelect('school.name', 'schoolName')
-      .where('payment.companyId = :companyId', { companyId })
-      .andWhere('payment.amountPaid > 0')
-      .andWhere('payment.paidAt IS NOT NULL')
-      .orderBy('payment.paidAt', 'DESC')
-      .limit(limit)
-      .getRawMany<{
-        id: string;
-        amount: string;
-        paymentMethod: RecentPaymentActivityRecord['paymentMethod'];
-        paidAt: Date;
-        studentName: string;
-        schoolName: string;
-      }>();
-
-    return rows.map((row) => ({
-      id: row.id,
-      studentName: row.studentName,
-      schoolName: row.schoolName,
-      amount: parseFloat(row.amount),
-      paymentMethod: row.paymentMethod,
-      paidAt: row.paidAt,
     }));
   }
 }

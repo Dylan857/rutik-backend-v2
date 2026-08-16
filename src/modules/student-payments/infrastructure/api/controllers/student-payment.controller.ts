@@ -68,8 +68,13 @@ export class StudentPaymentController {
   })
   @ApiOkResponse({ type: GenerateBillingCycleResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  async generateBillingCycle(): Promise<GenerateBillingCycleResponseDto> {
-    const summary = await this.paymentsService.generateNextBillingCycle();
+  async generateBillingCycle(
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<GenerateBillingCycleResponseDto> {
+    const summary = await this.paymentsService.generateNextBillingCycle({
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(GenerateBillingCycleResponseDto, summary, {
       excludeExtraneousValues: true,
     });
@@ -94,10 +99,17 @@ export class StudentPaymentController {
   @ApiConflictResponse({
     description: 'Payment record already exists for this student and period',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async create(
     @Body() dto: CreateStudentPaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<StudentPaymentResponseDto> {
-    const payment = await this.paymentsService.create(dto);
+    const payment = await this.paymentsService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -261,11 +273,18 @@ export class StudentPaymentController {
   @ApiOkResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
   @ApiBadRequestResponse({ description: 'Invalid fee value' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStudentPaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<StudentPaymentResponseDto> {
-    const payment = await this.paymentsService.update(id, dto);
+    const payment = await this.paymentsService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -273,10 +292,19 @@ export class StudentPaymentController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a payment record' })
   @ApiNoContentResponse({ description: 'Payment record deleted successfully' })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.paymentsService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.paymentsService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

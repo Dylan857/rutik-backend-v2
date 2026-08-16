@@ -26,9 +26,11 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { DriverPaymentsService } from '../../../application/driver-payments.service';
 import { DriverPaymentStatus } from '../../../domain/enums/payment-status.enum';
@@ -63,8 +65,13 @@ export class DriverPaymentController {
   })
   @ApiOkResponse({ type: GenerateDriverPaymentCycleResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  async generatePaymentCycle(): Promise<GenerateDriverPaymentCycleResponseDto> {
-    const summary = await this.paymentsService.generateNextPaymentCycle();
+  async generatePaymentCycle(
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<GenerateDriverPaymentCycleResponseDto> {
+    const summary = await this.paymentsService.generateNextPaymentCycle({
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(GenerateDriverPaymentCycleResponseDto, summary, {
       excludeExtraneousValues: true,
     });
@@ -90,10 +97,17 @@ export class DriverPaymentController {
   @ApiConflictResponse({
     description: 'Payment record already exists for this driver and period',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async create(
     @Body() dto: CreateDriverPaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<DriverPaymentResponseDto> {
-    const payment = await this.paymentsService.create(dto);
+    const payment = await this.paymentsService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(DriverPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -174,11 +188,18 @@ export class DriverPaymentController {
   @ApiOkResponse({ type: DriverPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
   @ApiBadRequestResponse({ description: 'Invalid salary amount' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDriverPaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<DriverPaymentResponseDto> {
-    const payment = await this.paymentsService.update(id, dto);
+    const payment = await this.paymentsService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(DriverPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -186,10 +207,19 @@ export class DriverPaymentController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a payment record' })
   @ApiNoContentResponse({ description: 'Payment record deleted successfully' })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.paymentsService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.paymentsService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

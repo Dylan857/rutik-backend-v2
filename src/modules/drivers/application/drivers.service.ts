@@ -8,6 +8,10 @@ import {
 import { CompanyService } from '../../company/application/company.service';
 import { UserService } from '../../user/application/user.service';
 import { UserRole } from '../../user/domain/enums/user-role.enum';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { Driver } from '../domain/driver.entity';
 import {
   DriverFilters,
@@ -24,9 +28,10 @@ export class DriverService {
     private readonly driverRepository: IDriverRepository,
     private readonly companyService: CompanyService,
     private readonly userService: UserService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateDriverDto): Promise<Driver> {
+  async create(dto: CreateDriverDto, actor: AuditActor): Promise<Driver> {
     await this.companyService.findById(dto.companyId);
 
     await this.assertLicenseAvailable(dto.licenseNumber, dto.companyId);
@@ -34,18 +39,21 @@ export class DriverService {
 
     // Auto-create the User with role DRIVER. companyId and role are set by us,
     // not by the client, guaranteeing both constraints are always satisfied.
-    const user = await this.userService.create({
-      companyId: dto.companyId,
-      role: UserRole.DRIVER,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      document: dto.document,
-      email: dto.email,
-      password: dto.password,
-      phone: dto.phone,
-    });
+    const user = await this.userService.create(
+      {
+        companyId: dto.companyId,
+        role: UserRole.DRIVER,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        document: dto.document,
+        email: dto.email,
+        password: dto.password,
+        phone: dto.phone,
+      },
+      actor,
+    );
 
-    return this.driverRepository.create({
+    const driver = await this.driverRepository.create({
       companyId: dto.companyId,
       userId: user.id,
       licenseNumber: dto.licenseNumber,
@@ -57,6 +65,18 @@ export class DriverService {
       status: dto.status,
       observations: dto.observations,
     });
+
+    await this.auditLogsService.record({
+      companyId: driver.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.DRIVER,
+      entityId: driver.id,
+      description: `Se registró el conductor ${dto.firstName} ${dto.lastName}`,
+    });
+
+    return driver;
   }
 
   async findAll(filters: DriverFilters): Promise<Driver[]> {
@@ -73,7 +93,11 @@ export class DriverService {
     return driver;
   }
 
-  async update(id: string, dto: UpdateDriverDto): Promise<Driver> {
+  async update(
+    id: string,
+    dto: UpdateDriverDto,
+    actor: AuditActor,
+  ): Promise<Driver> {
     const current = await this.findById(id);
 
     if (dto.licenseNumber && dto.licenseNumber !== current.licenseNumber) {
@@ -91,12 +115,36 @@ export class DriverService {
       this.assertLicenseNotExpired(dto.licenseExpirationDate);
     }
 
-    return this.driverRepository.update(id, dto);
+    const updated = await this.driverRepository.update(id, dto);
+    const user = await this.userService.findById(updated.userId);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.DRIVER,
+      entityId: updated.id,
+      description: `Se actualizó el conductor ${user.firstName} ${user.lastName}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const driver = await this.findById(id);
+    const user = await this.userService.findById(driver.userId);
     await this.driverRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: driver.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.DRIVER,
+      entityId: driver.id,
+      description: `Se eliminó el conductor ${user.firstName} ${user.lastName}`,
+    });
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────

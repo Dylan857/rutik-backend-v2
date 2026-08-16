@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,8 +23,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { VehiclesService } from '../../../application/vehicles.service';
 import { VehicleDetailService } from '../../../application/vehicle-detail.service';
 import { VehicleStatus } from '../../../domain/enums/vehicle-status.enum';
@@ -55,8 +61,17 @@ export class VehicleController {
   @ApiConflictResponse({
     description: 'Plate already registered in this company',
   })
-  async create(@Body() dto: CreateVehicleDto): Promise<VehicleResponseDto> {
-    const vehicle = await this.vehiclesService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateVehicleDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<VehicleResponseDto> {
+    const vehicle = await this.vehiclesService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(VehicleResponseDto, vehicle, {
       excludeExtraneousValues: true,
     });
@@ -162,11 +177,18 @@ export class VehicleController {
   @ApiConflictResponse({
     description: 'Plate already registered in this company',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateVehicleDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<VehicleResponseDto> {
-    const vehicle = await this.vehiclesService.update(id, dto);
+    const vehicle = await this.vehiclesService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(VehicleResponseDto, vehicle, {
       excludeExtraneousValues: true,
     });
@@ -174,10 +196,19 @@ export class VehicleController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a vehicle' })
   @ApiNoContentResponse({ description: 'Vehicle deactivated successfully' })
   @ApiNotFoundResponse({ description: 'Vehicle not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.vehiclesService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.vehiclesService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

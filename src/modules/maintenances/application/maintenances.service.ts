@@ -5,6 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { VehiclesService } from '../../vehicles/application/vehicles.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { Maintenance } from '../domain/maintenance.entity';
 import {
   IMaintenanceRepository,
@@ -44,9 +48,13 @@ export class MaintenancesService {
     @Inject(MAINTENANCE_REPOSITORY)
     private readonly maintenanceRepository: IMaintenanceRepository,
     private readonly vehiclesService: VehiclesService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateMaintenanceDto): Promise<MaintenanceWithStatus> {
+  async create(
+    dto: CreateMaintenanceDto,
+    actor: AuditActor,
+  ): Promise<MaintenanceWithStatus> {
     const vehicle = await this.vehiclesService.findById(dto.vehicleId);
     this.assertDateNotFuture(dto.date);
     this.assertNextMaintenanceIsCoherent(dto, dto.date, dto.mileage);
@@ -70,11 +78,23 @@ export class MaintenancesService {
     });
 
     if (dto.mileage > vehicle.currentMileage) {
-      await this.vehiclesService.update(vehicle.id, {
-        currentMileage: dto.mileage,
-      });
+      await this.vehiclesService.update(
+        vehicle.id,
+        { currentMileage: dto.mileage },
+        actor,
+      );
       vehicle.currentMileage = dto.mileage;
     }
+
+    await this.auditLogsService.record({
+      companyId: maintenance.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.MAINTENANCE,
+      entityId: maintenance.id,
+      description: `Se registró un mantenimiento de ${maintenance.totalCost} para el vehículo ${vehicle.plate}`,
+    });
 
     return this.toResponseShape({ ...maintenance, vehicle });
   }
@@ -95,6 +115,7 @@ export class MaintenancesService {
   async update(
     id: string,
     dto: UpdateMaintenanceDto,
+    actor: AuditActor,
   ): Promise<MaintenanceWithStatus> {
     const current = await this.maintenanceRepository.findById(id);
     if (!current) {
@@ -152,21 +173,43 @@ export class MaintenancesService {
       dto.mileage !== undefined &&
       dto.mileage > current.vehicle.currentMileage
     ) {
-      await this.vehiclesService.update(current.vehicleId, {
-        currentMileage: dto.mileage,
-      });
+      await this.vehiclesService.update(
+        current.vehicleId,
+        { currentMileage: dto.mileage },
+        actor,
+      );
       updated.vehicle.currentMileage = dto.mileage;
     }
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.MAINTENANCE,
+      entityId: updated.id,
+      description: `Se actualizó el mantenimiento del vehículo ${updated.vehicle.plate}`,
+    });
 
     return this.toResponseShape(updated);
   }
 
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
     const maintenance = await this.maintenanceRepository.findById(id);
     if (!maintenance) {
       throw new NotFoundException(`Maintenance with ID "${id}" not found`);
     }
     await this.maintenanceRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: maintenance.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.MAINTENANCE,
+      entityId: maintenance.id,
+      description: `Se eliminó el mantenimiento del vehículo ${maintenance.vehicle.plate}`,
+    });
   }
 
   async getSummary(

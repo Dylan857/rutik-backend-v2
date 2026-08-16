@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -20,8 +22,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { FuelLogsService } from '../../../application/fuel-logs.service';
 import { CreateFuelLogDto } from '../dto/create-fuel-log.dto';
 import { UpdateFuelLogDto } from '../dto/update-fuel-log.dto';
@@ -47,8 +53,17 @@ export class FuelLogController {
   @ApiBadRequestResponse({
     description: 'Fuel log date cannot be in the future',
   })
-  async create(@Body() dto: CreateFuelLogDto): Promise<FuelLogResponseDto> {
-    const fuelLog = await this.fuelLogsService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateFuelLogDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<FuelLogResponseDto> {
+    const fuelLog = await this.fuelLogsService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(FuelLogResponseDto, fuelLog, {
       excludeExtraneousValues: true,
     });
@@ -117,11 +132,18 @@ export class FuelLogController {
   @ApiBadRequestResponse({
     description: 'Fuel log date cannot be in the future',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateFuelLogDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<FuelLogResponseDto> {
-    const fuelLog = await this.fuelLogsService.update(id, dto);
+    const fuelLog = await this.fuelLogsService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(FuelLogResponseDto, fuelLog, {
       excludeExtraneousValues: true,
     });
@@ -129,10 +151,19 @@ export class FuelLogController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a fuel log' })
   @ApiNoContentResponse({ description: 'Fuel log deleted successfully' })
   @ApiNotFoundResponse({ description: 'Fuel log not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.fuelLogsService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.fuelLogsService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

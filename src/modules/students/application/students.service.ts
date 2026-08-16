@@ -8,6 +8,10 @@ import { CompanyService } from '../../company/application/company.service';
 import { SchoolService } from '../../school/application/school.service';
 import { SchoolScheduleService } from '../../school-schedules/application/school-schedules.service';
 import { RouteStopsService } from '../../route-stops/application/route-stops.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { Student } from '../domain/student.entity';
 import {
   IStudentRepository,
@@ -26,9 +30,10 @@ export class StudentService {
     private readonly schoolService: SchoolService,
     private readonly scheduleService: SchoolScheduleService,
     private readonly routeStopsService: RouteStopsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateStudentDto): Promise<Student> {
+  async create(dto: CreateStudentDto, actor: AuditActor): Promise<Student> {
     await this.companyService.findById(dto.companyId);
 
     const school = await this.schoolService.findById(dto.schoolId);
@@ -51,6 +56,16 @@ export class StudentService {
     // expected during initial setup and is logged, not thrown, by RouteStopsService.
     await this.routeStopsService.addStudentToRoute(student);
 
+    await this.auditLogsService.record({
+      companyId: student.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.STUDENT,
+      entityId: student.id,
+      description: `Se registró el estudiante ${student.firstName} ${student.lastName}`,
+    });
+
     return student;
   }
 
@@ -68,7 +83,11 @@ export class StudentService {
     return student;
   }
 
-  async update(id: string, dto: UpdateStudentDto): Promise<Student> {
+  async update(
+    id: string,
+    dto: UpdateStudentDto,
+    actor: AuditActor,
+  ): Promise<Student> {
     const current = await this.findById(id);
 
     if (dto.scheduleId && dto.scheduleId !== current.scheduleId) {
@@ -103,12 +122,32 @@ export class StudentService {
       await this.routeStopsService.refreshRouteForStudent(id);
     }
 
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT,
+      entityId: updated.id,
+      description: `Se actualizó el estudiante ${updated.firstName} ${updated.lastName}`,
+    });
+
     return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const student = await this.findById(id);
     await this.routeStopsService.removeStudentFromRoute(id);
     await this.studentRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: student.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.STUDENT,
+      entityId: student.id,
+      description: `Se eliminó el estudiante ${student.firstName} ${student.lastName}`,
+    });
   }
 }

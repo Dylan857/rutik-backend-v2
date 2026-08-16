@@ -7,6 +7,10 @@ import {
 } from '@nestjs/common';
 import { CompanyService } from '../../company/application/company.service';
 import { SchoolService } from '../../school/application/school.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { SchoolSchedule } from '../domain/school-schedule.entity';
 import {
   ISchoolScheduleRepository,
@@ -23,9 +27,13 @@ export class SchoolScheduleService {
     private readonly scheduleRepository: ISchoolScheduleRepository,
     private readonly companyService: CompanyService,
     private readonly schoolService: SchoolService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateSchoolScheduleDto): Promise<SchoolSchedule> {
+  async create(
+    dto: CreateSchoolScheduleDto,
+    actor: AuditActor,
+  ): Promise<SchoolSchedule> {
     await this.companyService.findById(dto.companyId);
 
     const school = await this.schoolService.findById(dto.schoolId);
@@ -49,7 +57,19 @@ export class SchoolScheduleService {
       );
     }
 
-    return this.scheduleRepository.create(dto);
+    const schedule = await this.scheduleRepository.create(dto);
+
+    await this.auditLogsService.record({
+      companyId: schedule.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.SCHOOL_SCHEDULE,
+      entityId: schedule.id,
+      description: `Se registró el horario ${schedule.name}`,
+    });
+
+    return schedule;
   }
 
   async findAll(filters: ScheduleFilters): Promise<SchoolSchedule[]> {
@@ -69,6 +89,7 @@ export class SchoolScheduleService {
   async update(
     id: string,
     dto: UpdateSchoolScheduleDto,
+    actor: AuditActor,
   ): Promise<SchoolSchedule> {
     const current = await this.findById(id);
 
@@ -90,11 +111,33 @@ export class SchoolScheduleService {
       }
     }
 
-    return this.scheduleRepository.update(id, dto);
+    const updated = await this.scheduleRepository.update(id, dto);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.SCHOOL_SCHEDULE,
+      entityId: updated.id,
+      description: `Se actualizó el horario ${updated.name}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const schedule = await this.findById(id);
     await this.scheduleRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: schedule.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.SCHOOL_SCHEDULE,
+      entityId: schedule.id,
+      description: `Se eliminó el horario ${schedule.name}`,
+    });
   }
 }

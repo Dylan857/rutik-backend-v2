@@ -7,10 +7,15 @@ import {
 } from '@nestjs/common';
 import { CompanyService } from '../../company/application/company.service';
 import { DriverService } from '../../drivers/application/drivers.service';
+import { UserService } from '../../user/application/user.service';
 import { SchoolService } from '../../school/application/school.service';
 import { SchoolScheduleService } from '../../school-schedules/application/school-schedules.service';
 import { SchoolRoutesService } from '../../school-routes/application/school-routes.service';
 import { VehiclesService } from '../../vehicles/application/vehicles.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { SchoolAssignment } from '../domain/school-assignment.entity';
 import { AssignmentStatus } from '../domain/enums/assignment-status.enum';
 import {
@@ -41,9 +46,14 @@ export class SchoolAssignmentsService {
     private readonly driverService: DriverService,
     private readonly vehiclesService: VehiclesService,
     private readonly schoolRoutesService: SchoolRoutesService,
+    private readonly userService: UserService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateSchoolAssignmentDto): Promise<SchoolAssignment> {
+  async create(
+    dto: CreateSchoolAssignmentDto,
+    actor: AuditActor,
+  ): Promise<SchoolAssignment> {
     // ── 1. Verify all referenced entities exist ───────────────────────────────
     await this.companyService.findById(dto.companyId);
 
@@ -88,6 +98,17 @@ export class SchoolAssignmentsService {
 
     await this.schoolRoutesService.syncRoute('create', assignment);
 
+    const driverUser = await this.userService.findById(driver.userId);
+    await this.auditLogsService.record({
+      companyId: assignment.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.SCHOOL_ASSIGNMENT,
+      entityId: assignment.id,
+      description: `Se creó la asignación de ${school.name} con el conductor ${driverUser.firstName} ${driverUser.lastName} y vehículo ${vehicle.plate}`,
+    });
+
     return assignment;
   }
 
@@ -104,6 +125,7 @@ export class SchoolAssignmentsService {
   async update(
     id: string,
     dto: UpdateSchoolAssignmentDto,
+    actor: AuditActor,
   ): Promise<AssignmentSummary> {
     const current = await this.findRawById(id);
 
@@ -154,13 +176,33 @@ export class SchoolAssignmentsService {
       );
     }
 
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.SCHOOL_ASSIGNMENT,
+      entityId: updated.id,
+      description: `Se actualizó la asignación de ${current.school.name}`,
+    });
+
     return this.toSummary(updated);
   }
 
-  async softDelete(id: string): Promise<void> {
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
     const assignment = await this.findRawById(id);
     await this.assignmentRepository.softDelete(id);
     await this.schoolRoutesService.syncRoute('deactivate', assignment);
+
+    await this.auditLogsService.record({
+      companyId: assignment.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.SCHOOL_ASSIGNMENT,
+      entityId: assignment.id,
+      description: `Se eliminó la asignación de ${assignment.school.name}`,
+    });
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────────
