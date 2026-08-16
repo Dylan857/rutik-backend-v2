@@ -5,6 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompanyService } from '../../company/application/company.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { School } from '../domain/school.entity';
 import {
   ISchoolRepository,
@@ -19,9 +23,10 @@ export class SchoolService {
     @Inject(SCHOOL_REPOSITORY)
     private readonly schoolRepository: ISchoolRepository,
     private readonly companyService: CompanyService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateSchoolDto): Promise<School> {
+  async create(dto: CreateSchoolDto, actor: AuditActor): Promise<School> {
     await this.companyService.findById(dto.companyId);
 
     const existing = await this.schoolRepository.findByNameAndCompany(
@@ -34,7 +39,19 @@ export class SchoolService {
       );
     }
 
-    return this.schoolRepository.create(dto);
+    const school = await this.schoolRepository.create(dto);
+
+    await this.auditLogsService.record({
+      companyId: school.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.SCHOOL,
+      entityId: school.id,
+      description: `Se registró el colegio ${school.name}`,
+    });
+
+    return school;
   }
 
   async findAll(
@@ -53,7 +70,11 @@ export class SchoolService {
     return school;
   }
 
-  async update(id: string, dto: UpdateSchoolDto): Promise<School> {
+  async update(
+    id: string,
+    dto: UpdateSchoolDto,
+    actor: AuditActor,
+  ): Promise<School> {
     const current = await this.findById(id);
 
     if (dto.name && dto.name !== current.name) {
@@ -68,11 +89,33 @@ export class SchoolService {
       }
     }
 
-    return this.schoolRepository.update(id, dto);
+    const updated = await this.schoolRepository.update(id, dto);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.SCHOOL,
+      entityId: updated.id,
+      description: `Se actualizó el colegio ${updated.name}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const school = await this.findById(id);
     await this.schoolRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: school.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.SCHOOL,
+      entityId: school.id,
+      description: `Se eliminó el colegio ${school.name}`,
+    });
   }
 }

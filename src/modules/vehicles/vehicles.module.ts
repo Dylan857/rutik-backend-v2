@@ -4,6 +4,7 @@ import { CompanyModule } from '../company/company.module';
 import { FuelLog } from '../fuel-logs/domain/fuel-log.entity';
 import { SchoolRoute } from '../school-routes/domain/school-route.entity';
 import { RouteStop } from '../route-stops/domain/route-stop.entity';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { Vehicle } from './domain/vehicle.entity';
 import { VEHICLE_REPOSITORY } from './domain/interfaces/vehicle.repository';
 import { VEHICLE_DETAIL_REPOSITORY } from './domain/interfaces/vehicle-detail.repository';
@@ -23,6 +24,7 @@ import { VehicleController } from './infrastructure/api/controllers/vehicle.cont
   imports: [
     TypeOrmModule.forFeature([Vehicle, FuelLog, SchoolRoute, RouteStop]),
     CompanyModule,
+    AuditLogsModule,
   ],
   controllers: [VehicleController],
   providers: [

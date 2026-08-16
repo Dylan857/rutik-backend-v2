@@ -49,8 +49,14 @@ export class UserController {
   @ApiCreatedResponse({ type: UserResponseDto })
   @ApiConflictResponse({ description: 'Email or document already registered' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  async create(@Body() dto: CreateUserDto): Promise<UserResponseDto> {
-    const user = await this.userService.create(dto);
+  async create(
+    @Body() dto: CreateUserDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<UserResponseDto> {
+    const user = await this.userService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(UserResponseDto, user, {
       excludeExtraneousValues: true,
     });
@@ -113,8 +119,12 @@ export class UserController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<UserResponseDto> {
-    const user = await this.userService.update(id, dto);
+    const user = await this.userService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(UserResponseDto, user, {
       excludeExtraneousValues: true,
     });
@@ -127,7 +137,13 @@ export class UserController {
   @ApiOperation({ summary: 'Soft delete a user' })
   @ApiNoContentResponse({ description: 'User deactivated successfully' })
   @ApiNotFoundResponse({ description: 'User not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.userService.softDelete(id);
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.userService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

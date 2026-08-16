@@ -7,6 +7,7 @@ import { SchoolRoute } from '../school-routes/domain/school-route.entity';
 import { StudentPayment } from '../student-payments/domain/student-payment.entity';
 import { FuelLogsModule } from '../fuel-logs/fuel-logs.module';
 import { MaintenancesModule } from '../maintenances/maintenances.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { DASHBOARD_REPOSITORY } from './domain/interfaces/dashboard.repository';
 import {
   EXPENSE_CATEGORY_PROVIDERS,
@@ -21,10 +22,11 @@ import { DashboardController } from './infrastructure/api/controllers/dashboard.
 // Read-only and intentionally independent from every other feature module —
 // it talks to the underlying entities directly through its own repository
 // instead of delegating to StudentsModule/SchoolModule/etc, so it never
-// creates, updates, or deletes anything. The only exception is the expense
+// creates, updates, or deletes anything. The exceptions are the expense
 // category providers for the profit summary, which delegate to
 // FuelLogsService/MaintenancesService (and future expense modules) instead of
-// querying their tables directly.
+// querying their tables directly, and AuditLogsModule, which backs
+// recentActivity instead of the dashboard querying student_payments itself.
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -36,6 +38,7 @@ import { DashboardController } from './infrastructure/api/controllers/dashboard.
     ]),
     FuelLogsModule,
     MaintenancesModule,
+    AuditLogsModule,
   ],
   controllers: [DashboardController],
   providers: [

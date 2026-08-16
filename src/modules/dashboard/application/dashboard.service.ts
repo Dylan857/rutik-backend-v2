@@ -4,7 +4,6 @@ import {
   IDashboardRepository,
   PaymentAmountTotals,
   PaymentStatusCounts,
-  RecentPaymentActivityRecord,
   SummaryCounts,
   UpcomingPaymentRecord,
 } from '../domain/interfaces/dashboard.repository';
@@ -13,6 +12,8 @@ import {
   ExpenseCategoryTotal,
   IExpenseCategoryProvider,
 } from '../domain/interfaces/expense-category-provider';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditLog } from '../../audit-logs/domain/audit-log.entity';
 
 // "Próximo a vencer" window for the upcomingPayments section.
 const UPCOMING_PAYMENTS_WINDOW_DAYS = 5;
@@ -36,7 +37,7 @@ export interface DashboardData {
   paymentSummary: PaymentSummaryData;
   revenueSummary: RevenueSummaryData;
   upcomingPayments: UpcomingPaymentRecord[];
-  recentActivity: RecentPaymentActivityRecord[];
+  recentActivity: AuditLog[];
 }
 
 export interface ProfitSummaryData {
@@ -56,6 +57,7 @@ export class DashboardService {
     private readonly dashboardRepository: IDashboardRepository,
     @Inject(EXPENSE_CATEGORY_PROVIDERS)
     private readonly expenseCategoryProviders: IExpenseCategoryProvider[],
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async getDashboard(
@@ -193,10 +195,8 @@ export class DashboardService {
     );
   }
 
-  private getRecentActivity(
-    companyId: string,
-  ): Promise<RecentPaymentActivityRecord[]> {
-    return this.dashboardRepository.getRecentPaymentActivity(
+  private getRecentActivity(companyId: string): Promise<AuditLog[]> {
+    return this.auditLogsService.getRecentActivity(
       companyId,
       RECENT_ACTIVITY_LIMIT,
     );

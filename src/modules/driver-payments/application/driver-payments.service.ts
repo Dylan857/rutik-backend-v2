@@ -10,6 +10,11 @@ import { CompanyStatus } from '../../company/domain/enums/company-status.enum';
 import { DriverService } from '../../drivers/application/drivers.service';
 import { DriverStatus } from '../../drivers/domain/enums/driver-status.enum';
 import { PaymentType } from '../../drivers/domain/enums/payment-type.enum';
+import { UserService } from '../../user/application/user.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { DriverPayment } from '../domain/driver-payment.entity';
 import { DriverPaymentStatus } from '../domain/enums/payment-status.enum';
 import {
@@ -53,9 +58,14 @@ export class DriverPaymentsService {
     private readonly paymentRepository: IDriverPaymentRepository,
     private readonly companyService: CompanyService,
     private readonly driverService: DriverService,
+    private readonly userService: UserService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateDriverPaymentDto): Promise<DriverPayment> {
+  async create(
+    dto: CreateDriverPaymentDto,
+    actor: AuditActor,
+  ): Promise<DriverPayment> {
     await this.companyService.findById(dto.companyId);
 
     const driver = await this.driverService.findById(dto.driverId);
@@ -104,6 +114,17 @@ export class DriverPaymentsService {
       notes: dto.notes ?? null,
     });
 
+    const driverUser = await this.userService.findById(driver.userId);
+    await this.auditLogsService.record({
+      companyId: created.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.DRIVER_PAYMENT,
+      entityId: created.id,
+      description: `Se registró un pago de ${amountPaid} para el conductor ${driverUser.firstName} ${driverUser.lastName}`,
+    });
+
     return this.attachComputed(created, computed);
   }
 
@@ -123,6 +144,7 @@ export class DriverPaymentsService {
   async update(
     id: string,
     dto: UpdateDriverPaymentDto,
+    actor: AuditActor,
   ): Promise<DriverPayment> {
     const current = await this.paymentRepository.findById(id);
     if (!current) {
@@ -161,12 +183,36 @@ export class DriverPaymentsService {
       paidAt: computed.paidAt,
     });
 
+    const driver = await this.driverService.findById(updated.driverId);
+    const driverUser = await this.userService.findById(driver.userId);
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.DRIVER_PAYMENT,
+      entityId: updated.id,
+      description: `Se actualizó el pago del conductor ${driverUser.firstName} ${driverUser.lastName}`,
+    });
+
     return this.attachComputed(updated, computed);
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const payment = await this.findById(id);
+    const driver = await this.driverService.findById(payment.driverId);
+    const driverUser = await this.userService.findById(driver.userId);
     await this.paymentRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: payment.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.DRIVER_PAYMENT,
+      entityId: payment.id,
+      description: `Se eliminó el pago del conductor ${driverUser.firstName} ${driverUser.lastName}`,
+    });
   }
 
   /**
@@ -194,7 +240,9 @@ export class DriverPaymentsService {
    * already open, or who already has a record for it, is skipped and
    * nothing is duplicated.
    */
-  async generateNextPaymentCycle(): Promise<PaymentCycleSummary> {
+  async generateNextPaymentCycle(
+    actor: AuditActor,
+  ): Promise<PaymentCycleSummary> {
     const referenceDate = new Date();
 
     const companies = await this.companyService.findAll();
@@ -278,6 +326,17 @@ export class DriverPaymentsService {
       });
       totalCreated += created;
       totalSkipped += skipped;
+
+      if (created > 0) {
+        await this.auditLogsService.record({
+          companyId: company.id,
+          actorUserId: actor.userId,
+          actorEmail: actor.email,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.DRIVER_PAYMENT,
+          description: `Se generaron ${created} pago(s) de nómina para conductores`,
+        });
+      }
     }
 
     return {

@@ -9,16 +9,22 @@ import {
   ParseUUIDPipe,
   Patch,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { SchoolRoutesService } from '../../../application/school-routes.service';
 import { RouteStatus } from '../../../domain/enums/route-status.enum';
 import { UpdateSchoolRouteDto } from '../dto/update-school-route.dto';
@@ -95,11 +101,18 @@ export class SchoolRouteController {
   })
   @ApiOkResponse({ type: SchoolRouteResponseDto })
   @ApiNotFoundResponse({ description: 'School route not found' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSchoolRouteDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<SchoolRouteResponseDto> {
-    const route = await this.schoolRoutesService.update(id, dto);
+    const route = await this.schoolRoutesService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(SchoolRouteResponseDto, route, {
       excludeExtraneousValues: true,
     });
@@ -107,6 +120,8 @@ export class SchoolRouteController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Soft delete a school route',
     description:
@@ -115,7 +130,14 @@ export class SchoolRouteController {
   })
   @ApiNoContentResponse({ description: 'Route deactivated successfully' })
   @ApiNotFoundResponse({ description: 'School route not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.schoolRoutesService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.schoolRoutesService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

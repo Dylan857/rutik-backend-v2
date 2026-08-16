@@ -6,6 +6,8 @@ import { SchoolModule } from '../school/school.module';
 import { SchoolSchedulesModule } from '../school-schedules/school-schedules.module';
 import { VehiclesModule } from '../vehicles/vehicles.module';
 import { SchoolRoutesModule } from '../school-routes/school-routes.module';
+import { UserModule } from '../user/user.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { SchoolAssignment } from './domain/school-assignment.entity';
 import { SCHOOL_ASSIGNMENT_REPOSITORY } from './domain/interfaces/school-assignment.repository';
 import { SchoolAssignmentRepositoryImpl } from './infrastructure/repositories/school-assignment.repository.impl';
@@ -21,6 +23,8 @@ import { SchoolAssignmentController } from './infrastructure/api/controllers/sch
     DriversModule,
     VehiclesModule,
     SchoolRoutesModule,
+    UserModule,
+    AuditLogsModule,
   ],
   controllers: [SchoolAssignmentController],
   providers: [

@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -20,8 +22,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { MaintenancesService } from '../../../application/maintenances.service';
 import { CreateMaintenanceDto } from '../dto/create-maintenance.dto';
 import { UpdateMaintenanceDto } from '../dto/update-maintenance.dto';
@@ -49,10 +55,17 @@ export class MaintenanceController {
       'Maintenance date cannot be in the future, or next maintenance ' +
       'date/mileage is not coherent with the current record',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async create(
     @Body() dto: CreateMaintenanceDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<MaintenanceResponseDto> {
-    const maintenance = await this.maintenancesService.create(dto);
+    const maintenance = await this.maintenancesService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(MaintenanceResponseDto, maintenance, {
       excludeExtraneousValues: true,
     });
@@ -162,11 +175,18 @@ export class MaintenanceController {
       'Maintenance date cannot be in the future, or next maintenance ' +
       'date/mileage is not coherent with the current record',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMaintenanceDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<MaintenanceResponseDto> {
-    const maintenance = await this.maintenancesService.update(id, dto);
+    const maintenance = await this.maintenancesService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(MaintenanceResponseDto, maintenance, {
       excludeExtraneousValues: true,
     });
@@ -174,10 +194,19 @@ export class MaintenanceController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a maintenance' })
   @ApiNoContentResponse({ description: 'Maintenance deleted successfully' })
   @ApiNotFoundResponse({ description: 'Maintenance not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.maintenancesService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.maintenancesService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

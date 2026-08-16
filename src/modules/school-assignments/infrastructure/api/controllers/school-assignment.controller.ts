@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,8 +23,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { SchoolAssignmentsService } from '../../../application/school-assignments.service';
 import { AssignmentStatus } from '../../../domain/enums/assignment-status.enum';
 import { CreateSchoolAssignmentDto } from '../dto/create-school-assignment.dto';
@@ -55,10 +61,17 @@ export class SchoolAssignmentController {
     description:
       'Duplicate active assignment for this school/schedule, or driver/vehicle already assigned in this schedule',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async create(
     @Body() dto: CreateSchoolAssignmentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<SchoolAssignmentResponseDto> {
-    const assignment = await this.assignmentsService.create(dto);
+    const assignment = await this.assignmentsService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(SchoolAssignmentResponseDto, assignment, {
       excludeExtraneousValues: true,
     });
@@ -150,11 +163,18 @@ export class SchoolAssignmentController {
   @ApiConflictResponse({
     description: 'Driver or vehicle already assigned in this schedule',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSchoolAssignmentDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<SchoolAssignmentResponseDto> {
-    const assignment = await this.assignmentsService.update(id, dto);
+    const assignment = await this.assignmentsService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(SchoolAssignmentResponseDto, assignment, {
       excludeExtraneousValues: true,
     });
@@ -162,6 +182,8 @@ export class SchoolAssignmentController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Soft delete a school assignment',
     description:
@@ -169,7 +191,14 @@ export class SchoolAssignmentController {
   })
   @ApiNoContentResponse({ description: 'Assignment deactivated successfully' })
   @ApiNotFoundResponse({ description: 'School assignment not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.assignmentsService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.assignmentsService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

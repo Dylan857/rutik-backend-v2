@@ -6,6 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompanyService } from '../../company/application/company.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { Vehicle } from '../domain/vehicle.entity';
 import {
   IVehicleRepository,
@@ -21,9 +25,10 @@ export class VehiclesService {
     @Inject(VEHICLE_REPOSITORY)
     private readonly vehicleRepository: IVehicleRepository,
     private readonly companyService: CompanyService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateVehicleDto): Promise<Vehicle> {
+  async create(dto: CreateVehicleDto, actor: AuditActor): Promise<Vehicle> {
     await this.companyService.findById(dto.companyId);
 
     await this.assertPlateAvailable(dto.plate, dto.companyId);
@@ -33,7 +38,7 @@ export class VehiclesService {
       dto.technicalInspectionExpirationDate,
     );
 
-    return this.vehicleRepository.create({
+    const vehicle = await this.vehicleRepository.create({
       companyId: dto.companyId,
       plate: dto.plate,
       brand: dto.brand,
@@ -55,6 +60,18 @@ export class VehiclesService {
       status: dto.status,
       observations: dto.observations ?? null,
     });
+
+    await this.auditLogsService.record({
+      companyId: vehicle.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.VEHICLE,
+      entityId: vehicle.id,
+      description: `Se registró el vehículo ${vehicle.plate}`,
+    });
+
+    return vehicle;
   }
 
   async findAll(filters: VehicleFilters): Promise<Vehicle[]> {
@@ -71,7 +88,11 @@ export class VehiclesService {
     return vehicle;
   }
 
-  async update(id: string, dto: UpdateVehicleDto): Promise<Vehicle> {
+  async update(
+    id: string,
+    dto: UpdateVehicleDto,
+    actor: AuditActor,
+  ): Promise<Vehicle> {
     const current = await this.findById(id);
 
     if (dto.plate && dto.plate !== current.plate) {
@@ -108,12 +129,34 @@ export class VehiclesService {
         this.calculateBimonthlyExpiration(dto.lastBimonthlyInspectionDate);
     }
 
-    return this.vehicleRepository.update(id, updateData);
+    const updated = await this.vehicleRepository.update(id, updateData);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.VEHICLE,
+      entityId: updated.id,
+      description: `Se actualizó el vehículo ${updated.plate}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const vehicle = await this.findById(id);
     await this.vehicleRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: vehicle.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.VEHICLE,
+      entityId: vehicle.id,
+      description: `Se eliminó el vehículo ${vehicle.plate}`,
+    });
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────

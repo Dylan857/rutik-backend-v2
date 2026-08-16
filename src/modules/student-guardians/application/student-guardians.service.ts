@@ -7,6 +7,10 @@ import {
 } from '@nestjs/common';
 import { StudentService } from '../../students/application/students.service';
 import { GuardianService } from '../../guardians/application/guardians.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { StudentGuardian } from '../domain/student-guardian.entity';
 import {
   IStudentGuardianRepository,
@@ -23,9 +27,13 @@ export class StudentGuardianService {
     private readonly studentGuardianRepository: IStudentGuardianRepository,
     private readonly studentService: StudentService,
     private readonly guardianService: GuardianService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateStudentGuardianDto): Promise<StudentGuardian> {
+  async create(
+    dto: CreateStudentGuardianDto,
+    actor: AuditActor,
+  ): Promise<StudentGuardian> {
     const student = await this.studentService.findById(dto.studentId);
     const guardian = await this.guardianService.findById(dto.guardianId);
 
@@ -52,7 +60,19 @@ export class StudentGuardianService {
       );
     }
 
-    return this.studentGuardianRepository.create(dto);
+    const relation = await this.studentGuardianRepository.create(dto);
+
+    await this.auditLogsService.record({
+      companyId: student.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.STUDENT_GUARDIAN,
+      entityId: relation.id,
+      description: `Se vinculó al acudiente ${guardian.firstName} ${guardian.lastName} con el estudiante ${student.firstName} ${student.lastName}`,
+    });
+
+    return relation;
   }
 
   async findAll(filters: StudentGuardianFilters): Promise<StudentGuardian[]> {
@@ -72,6 +92,7 @@ export class StudentGuardianService {
   async update(
     id: string,
     dto: UpdateStudentGuardianDto,
+    actor: AuditActor,
   ): Promise<StudentGuardian> {
     const current = await this.findById(id);
 
@@ -83,11 +104,37 @@ export class StudentGuardianService {
       );
     }
 
-    return this.studentGuardianRepository.update(id, dto);
+    const updated = await this.studentGuardianRepository.update(id, dto);
+    const student = await this.studentService.findById(updated.studentId);
+    const guardian = await this.guardianService.findById(updated.guardianId);
+
+    await this.auditLogsService.record({
+      companyId: student.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_GUARDIAN,
+      entityId: updated.id,
+      description: `Se actualizó el vínculo entre ${guardian.firstName} ${guardian.lastName} y el estudiante ${student.firstName} ${student.lastName}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const relation = await this.findById(id);
+    const student = await this.studentService.findById(relation.studentId);
+    const guardian = await this.guardianService.findById(relation.guardianId);
     await this.studentGuardianRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: student.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.STUDENT_GUARDIAN,
+      entityId: relation.id,
+      description: `Se eliminó el vínculo entre ${guardian.firstName} ${guardian.lastName} y el estudiante ${student.firstName} ${student.lastName}`,
+    });
   }
 }

@@ -1,4 +1,3 @@
-import { PaymentMethod } from '../../../student-payments/domain/enums/payment-method.enum';
 import { PaymentStatus } from '../../../student-payments/domain/enums/payment-status.enum';
 
 export interface SummaryCounts {
@@ -32,15 +31,6 @@ export interface UpcomingPaymentRecord {
   status: PaymentStatus;
 }
 
-export interface RecentPaymentActivityRecord {
-  id: string;
-  studentName: string;
-  schoolName: string;
-  amount: number;
-  paymentMethod: PaymentMethod | null;
-  paidAt: Date;
-}
-
 // Every method is scoped by companyId. The caller (DashboardService) always
 // sources it from the authenticated JWT — this repository never accepts a
 // company-less query, so cross-company leakage is impossible by construction.
@@ -66,11 +56,6 @@ export interface IDashboardRepository {
     windowDays: number,
     limit: number,
   ): Promise<UpcomingPaymentRecord[]>;
-
-  getRecentPaymentActivity(
-    companyId: string,
-    limit: number,
-  ): Promise<RecentPaymentActivityRecord[]>;
 }
 
 export const DASHBOARD_REPOSITORY = Symbol('DASHBOARD_REPOSITORY');

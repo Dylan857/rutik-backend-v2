@@ -4,6 +4,7 @@ import { CompanyModule } from '../company/company.module';
 import { SchoolModule } from '../school/school.module';
 import { SchoolSchedulesModule } from '../school-schedules/school-schedules.module';
 import { RouteStopsModule } from '../route-stops/route-stops.module';
+import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { Student } from './domain/student.entity';
 import { STUDENT_REPOSITORY } from './domain/interfaces/student.repository';
 import { StudentRepositoryImpl } from './infrastructure/repositories/student.repository.impl';
@@ -17,6 +18,7 @@ import { StudentController } from './infrastructure/api/controllers/student.cont
     SchoolModule,
     SchoolSchedulesModule,
     RouteStopsModule,
+    AuditLogsModule,
   ],
   controllers: [StudentController],
   providers: [

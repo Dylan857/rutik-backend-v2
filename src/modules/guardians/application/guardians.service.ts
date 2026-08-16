@@ -7,6 +7,10 @@ import {
 } from '@nestjs/common';
 import { CompanyService } from '../../company/application/company.service';
 import { UserService } from '../../user/application/user.service';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { Guardian } from '../domain/guardian.entity';
 import {
   GuardianFilters,
@@ -23,9 +27,10 @@ export class GuardianService {
     private readonly guardianRepository: IGuardianRepository,
     private readonly companyService: CompanyService,
     private readonly userService: UserService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateGuardianDto): Promise<Guardian> {
+  async create(dto: CreateGuardianDto, actor: AuditActor): Promise<Guardian> {
     await this.companyService.findById(dto.companyId);
 
     if (dto.userId) {
@@ -35,7 +40,19 @@ export class GuardianService {
     await this.assertDocumentAvailable(dto.document, dto.companyId);
     await this.assertEmailAvailable(dto.email, dto.companyId);
 
-    return this.guardianRepository.create(dto);
+    const guardian = await this.guardianRepository.create(dto);
+
+    await this.auditLogsService.record({
+      companyId: guardian.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.GUARDIAN,
+      entityId: guardian.id,
+      description: `Se registró el acudiente ${guardian.firstName} ${guardian.lastName}`,
+    });
+
+    return guardian;
   }
 
   async findAll(filters: GuardianFilters): Promise<Guardian[]> {
@@ -52,7 +69,11 @@ export class GuardianService {
     return guardian;
   }
 
-  async update(id: string, dto: UpdateGuardianDto): Promise<Guardian> {
+  async update(
+    id: string,
+    dto: UpdateGuardianDto,
+    actor: AuditActor,
+  ): Promise<Guardian> {
     const current = await this.findById(id);
 
     if (dto.userId !== undefined && dto.userId !== current.userId) {
@@ -69,12 +90,34 @@ export class GuardianService {
       await this.assertEmailAvailable(dto.email, current.companyId, id);
     }
 
-    return this.guardianRepository.update(id, dto);
+    const updated = await this.guardianRepository.update(id, dto);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.GUARDIAN,
+      entityId: updated.id,
+      description: `Se actualizó el acudiente ${updated.firstName} ${updated.lastName}`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const guardian = await this.findById(id);
     await this.guardianRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: guardian.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.GUARDIAN,
+      entityId: guardian.id,
+      description: `Se eliminó el acudiente ${guardian.firstName} ${guardian.lastName}`,
+    });
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────────

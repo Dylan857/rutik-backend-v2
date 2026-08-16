@@ -10,8 +10,10 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -20,8 +22,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { SchoolService } from '../../../application/school.service';
 import { CreateSchoolDto } from '../dto/create-school.dto';
 import { UpdateSchoolDto } from '../dto/update-school.dto';
@@ -40,8 +46,17 @@ export class SchoolController {
   @ApiConflictResponse({
     description: 'School name already exists within this company',
   })
-  async create(@Body() dto: CreateSchoolDto): Promise<SchoolResponseDto> {
-    const school = await this.schoolService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateSchoolDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<SchoolResponseDto> {
+    const school = await this.schoolService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(SchoolResponseDto, school, {
       excludeExtraneousValues: true,
     });
@@ -86,11 +101,18 @@ export class SchoolController {
   @ApiConflictResponse({
     description: 'School name already exists within this company',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateSchoolDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<SchoolResponseDto> {
-    const school = await this.schoolService.update(id, dto);
+    const school = await this.schoolService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(SchoolResponseDto, school, {
       excludeExtraneousValues: true,
     });
@@ -98,10 +120,19 @@ export class SchoolController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a school' })
   @ApiNoContentResponse({ description: 'School deactivated successfully' })
   @ApiNotFoundResponse({ description: 'School not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.schoolService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.schoolService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

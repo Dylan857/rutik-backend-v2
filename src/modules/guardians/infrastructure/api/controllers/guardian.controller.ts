@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,8 +23,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { GuardianService } from '../../../application/guardians.service';
 import { GuardianStatus } from '../../../domain/enums/guardian-status.enum';
 import { CreateGuardianDto } from '../dto/create-guardian.dto';
@@ -44,8 +50,17 @@ export class GuardianController {
     description:
       'Document, email, or userId already in use within this company',
   })
-  async create(@Body() dto: CreateGuardianDto): Promise<GuardianResponseDto> {
-    const guardian = await this.guardianService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateGuardianDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<GuardianResponseDto> {
+    const guardian = await this.guardianService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(GuardianResponseDto, guardian, {
       excludeExtraneousValues: true,
     });
@@ -114,11 +129,18 @@ export class GuardianController {
     description:
       'Document, email, or userId already in use within this company',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateGuardianDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<GuardianResponseDto> {
-    const guardian = await this.guardianService.update(id, dto);
+    const guardian = await this.guardianService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(GuardianResponseDto, guardian, {
       excludeExtraneousValues: true,
     });
@@ -126,10 +148,19 @@ export class GuardianController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a guardian' })
   @ApiNoContentResponse({ description: 'Guardian deactivated successfully' })
   @ApiNotFoundResponse({ description: 'Guardian not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.guardianService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.guardianService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

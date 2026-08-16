@@ -10,9 +10,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -21,8 +23,12 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import { DriverService } from '../../../application/drivers.service';
 import { DriverStatus } from '../../../domain/enums/driver-status.enum';
 import { PaymentType } from '../../../domain/enums/payment-type.enum';
@@ -50,8 +56,17 @@ export class DriverController {
   @ApiConflictResponse({
     description: 'Email, document, or license number already in use',
   })
-  async create(@Body() dto: CreateDriverDto): Promise<DriverResponseDto> {
-    const driver = await this.driverService.create(dto);
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async create(
+    @Body() dto: CreateDriverDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<DriverResponseDto> {
+    const driver = await this.driverService.create(dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(DriverResponseDto, driver, {
       excludeExtraneousValues: true,
     });
@@ -119,11 +134,18 @@ export class DriverController {
   @ApiConflictResponse({
     description: 'License number already in use within this company',
   })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateDriverDto,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<DriverResponseDto> {
-    const driver = await this.driverService.update(id, dto);
+    const driver = await this.driverService.update(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(DriverResponseDto, driver, {
       excludeExtraneousValues: true,
     });
@@ -131,10 +153,19 @@ export class DriverController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Soft delete a driver profile' })
   @ApiNoContentResponse({ description: 'Driver deactivated successfully' })
   @ApiNotFoundResponse({ description: 'Driver not found' })
-  async softDelete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.driverService.softDelete(id);
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async softDelete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<void> {
+    await this.driverService.softDelete(id, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
   }
 }

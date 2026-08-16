@@ -1,36 +1,37 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { PaymentMethod } from '../../../../student-payments/domain/enums/payment-method.enum';
+import { AuditAction } from '../../../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../../../audit-logs/domain/enums/audit-entity-type.enum';
 
 export class RecentActivityDto {
   @ApiProperty({ example: 'f6a7b8c9-d0e1-2345-fabc-456789012345' })
   @Expose()
   id: string;
 
-  @ApiProperty({ example: 'María Gómez' })
+  @ApiProperty({ enum: AuditAction, example: AuditAction.CREATED })
   @Expose()
-  studentName: string;
+  action: AuditAction;
 
-  @ApiProperty({ example: 'Colegio San José' })
+  @ApiProperty({ enum: AuditEntityType, example: AuditEntityType.STUDENT })
   @Expose()
-  schoolName: string;
-
-  @ApiProperty({
-    example: 180000,
-    description: 'Amount paid in this transaction',
-  })
-  @Expose()
-  amount: number;
+  entityType: AuditEntityType;
 
   @ApiPropertyOptional({
-    enum: PaymentMethod,
-    example: PaymentMethod.TRANSFER,
+    example: 'f6a7b8c9-d0e1-2345-fabc-456789012345',
     nullable: true,
   })
   @Expose()
-  paymentMethod: PaymentMethod | null;
+  entityId: string | null;
+
+  @ApiProperty({ example: 'Se registró el estudiante María Gómez' })
+  @Expose()
+  description: string;
+
+  @ApiPropertyOptional({ example: 'admin@rutik.com', nullable: true })
+  @Expose()
+  actorEmail: string | null;
 
   @ApiProperty({ example: '2026-06-30T14:22:00.000Z' })
-  @Expose()
-  paidAt: Date;
+  @Expose({ name: 'createdAt' })
+  occurredAt: Date;
 }

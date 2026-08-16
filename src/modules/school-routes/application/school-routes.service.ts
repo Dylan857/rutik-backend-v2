@@ -1,5 +1,9 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { SchoolAssignment } from '../../school-assignments/domain/school-assignment.entity';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { SchoolRoute } from '../domain/school-route.entity';
 import { RouteStatus } from '../domain/enums/route-status.enum';
 import {
@@ -16,6 +20,7 @@ export class SchoolRoutesService {
   constructor(
     @Inject(SCHOOL_ROUTE_REPOSITORY)
     private readonly routeRepository: ISchoolRouteRepository,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async findAll(filters: RouteFilters): Promise<SchoolRoute[]> {
@@ -32,14 +37,40 @@ export class SchoolRoutesService {
     return route;
   }
 
-  async update(id: string, dto: UpdateSchoolRouteDto): Promise<SchoolRoute> {
+  async update(
+    id: string,
+    dto: UpdateSchoolRouteDto,
+    actor: AuditActor,
+  ): Promise<SchoolRoute> {
     await this.findById(id);
-    return this.routeRepository.update(id, dto);
+    const updated = await this.routeRepository.update(id, dto);
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.SCHOOL_ROUTE,
+      entityId: updated.id,
+      description: `Se actualizó la ruta escolar (estado: ${updated.status})`,
+    });
+
+    return updated;
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const route = await this.findById(id);
     await this.routeRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: route.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.SCHOOL_ROUTE,
+      entityId: route.id,
+      description: `Se eliminó la ruta escolar`,
+    });
   }
 
   // Called by RouteStopsService after a successful Google Directions call —

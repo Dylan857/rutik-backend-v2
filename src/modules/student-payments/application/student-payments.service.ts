@@ -13,6 +13,10 @@ import { NotificationsService } from '../../notifications/application/notificati
 import { NotificationType } from '../../notifications/domain/enums/notification-type.enum';
 import { NotificationSeverity } from '../../notifications/domain/enums/notification-severity.enum';
 import { NotificationSourceType } from '../../notifications/domain/enums/notification-source-type.enum';
+import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
+import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
+import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
+import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { StudentPayment } from '../domain/student-payment.entity';
 import { PaymentStatus } from '../domain/enums/payment-status.enum';
 import {
@@ -85,9 +89,13 @@ export class StudentPaymentsService {
     private readonly companyService: CompanyService,
     private readonly studentService: StudentService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(dto: CreateStudentPaymentDto): Promise<StudentPayment> {
+  async create(
+    dto: CreateStudentPaymentDto,
+    actor: AuditActor,
+  ): Promise<StudentPayment> {
     await this.companyService.findById(dto.companyId);
 
     const student = await this.studentService.findById(dto.studentId);
@@ -137,6 +145,16 @@ export class StudentPaymentsService {
       notes: dto.notes ?? null,
     });
 
+    await this.auditLogsService.record({
+      companyId: created.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.CREATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: created.id,
+      description: `Se registró un pago de ${amountPaid} para ${student.firstName} ${student.lastName}`,
+    });
+
     return this.attachComputed(created, computed);
   }
 
@@ -156,6 +174,7 @@ export class StudentPaymentsService {
   async update(
     id: string,
     dto: UpdateStudentPaymentDto,
+    actor: AuditActor,
   ): Promise<StudentPayment> {
     const current = await this.paymentRepository.findById(id);
     if (!current) {
@@ -196,12 +215,36 @@ export class StudentPaymentsService {
       paidAt: computed.paidAt,
     });
 
+    const updatedStudent = await this.studentService.findById(
+      updated.studentId,
+    );
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se actualizó el pago de ${updatedStudent.firstName} ${updatedStudent.lastName}`,
+    });
+
     return this.attachComputed(updated, computed);
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.findById(id);
+  async softDelete(id: string, actor: AuditActor): Promise<void> {
+    const payment = await this.findById(id);
+    const student = await this.studentService.findById(payment.studentId);
     await this.paymentRepository.softDelete(id);
+
+    await this.auditLogsService.record({
+      companyId: payment.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.DELETED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: payment.id,
+      description: `Se eliminó el pago de ${student.firstName} ${student.lastName}`,
+    });
   }
 
   /**
@@ -295,7 +338,9 @@ export class StudentPaymentsService {
    * is created for it; a company still catching up may open one additional
    * period per call until it reaches the ceiling.
    */
-  async generateNextBillingCycle(): Promise<BillingCycleSummary> {
+  async generateNextBillingCycle(
+    actor: AuditActor,
+  ): Promise<BillingCycleSummary> {
     const referenceDate = new Date();
     const { billingMonth: referenceMonth, billingYear: referenceYear } =
       getNextBillingPeriod(referenceDate);
@@ -381,6 +426,15 @@ export class StudentPaymentsService {
           message: `Se generaron ${created} pago(s) para el período de facturación ${periodLabel}.`,
           sourceType: NotificationSourceType.BILLING_CYCLE,
           dedupeKey: `${NotificationType.BILLING_CYCLE_READY}:${company.id}:${period.billingMonth}:${period.billingYear}`,
+        });
+
+        await this.auditLogsService.record({
+          companyId: company.id,
+          actorUserId: actor.userId,
+          actorEmail: actor.email,
+          action: AuditAction.CREATED,
+          entityType: AuditEntityType.STUDENT_PAYMENT,
+          description: `Se generaron ${created} pago(s) para el período ${periodLabel}`,
         });
       }
     }
