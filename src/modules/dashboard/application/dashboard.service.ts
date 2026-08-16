@@ -38,6 +38,7 @@ export interface DashboardData {
   revenueSummary: RevenueSummaryData;
   upcomingPayments: UpcomingPaymentRecord[];
   recentActivity: AuditLog[];
+  profitHistory: ProfitHistoryEntry[];
 }
 
 export interface ProfitSummaryData {
@@ -49,6 +50,23 @@ export interface ProfitSummaryData {
   maintenanceExpenses: number;
   expenseBreakdown: ExpenseCategoryTotal[];
 }
+
+export interface ProfitHistoryEntry {
+  billingMonth: number;
+  billingYear: number;
+  profit: number;
+}
+
+interface PeriodProfit {
+  income: number;
+  expenses: number;
+  profit: number;
+  expenseBreakdown: ExpenseCategoryTotal[];
+}
+
+// How many trailing billing periods (current month included) the dashboard's
+// "Utilidad últimos N meses" chart shows.
+const PROFIT_HISTORY_MONTHS = 6;
 
 @Injectable()
 export class DashboardService {
@@ -75,12 +93,14 @@ export class DashboardService {
       revenueSummary,
       upcomingPayments,
       recentActivity,
+      profitHistory,
     ] = await Promise.all([
       this.getSummaryCards(companyId),
       this.getPaymentSummary(companyId, periodMonth, periodYear),
       this.getRevenueSummary(companyId, periodMonth, periodYear),
       this.getUpcomingPayments(companyId, billingMonth, billingYear),
       this.getRecentActivity(companyId),
+      this.getProfitHistory(companyId, billingMonth, billingYear),
     ]);
 
     return {
@@ -89,6 +109,7 @@ export class DashboardService {
       revenueSummary,
       upcomingPayments,
       recentActivity,
+      profitHistory,
     };
   }
 
@@ -101,20 +122,8 @@ export class DashboardService {
     const periodMonth = selectedBillingMonth ?? billingMonth;
     const periodYear = selectedBillingYear ?? billingYear;
 
-    const [{ collected: income }, expenseBreakdown] = await Promise.all([
-      this.dashboardRepository.getPaymentAmountTotals(
-        companyId,
-        periodMonth,
-        periodYear,
-      ),
-      this.getExpenseBreakdown(companyId, periodMonth, periodYear),
-    ]);
-
-    const expenses = expenseBreakdown.reduce(
-      (sum, item) => sum + item.amount,
-      0,
-    );
-    const profit = income - expenses;
+    const { income, expenses, profit, expenseBreakdown } =
+      await this.computeProfitForPeriod(companyId, periodMonth, periodYear);
 
     return {
       income,
@@ -200,6 +209,79 @@ export class DashboardService {
       companyId,
       RECENT_ACTIVITY_LIMIT,
     );
+  }
+
+  // Computed in-process for each of the trailing PROFIT_HISTORY_MONTHS
+  // periods (current month included) — never re-fetches over HTTP, just
+  // reuses the same repository calls getProfitSummary already makes.
+  private async getProfitHistory(
+    companyId: string,
+    currentBillingMonth: number,
+    currentBillingYear: number,
+  ): Promise<ProfitHistoryEntry[]> {
+    const periods = this.getTrailingPeriods(
+      currentBillingMonth,
+      currentBillingYear,
+      PROFIT_HISTORY_MONTHS,
+    );
+
+    return Promise.all(
+      periods.map(async ({ billingMonth, billingYear }) => {
+        const { profit } = await this.computeProfitForPeriod(
+          companyId,
+          billingMonth,
+          billingYear,
+        );
+        return { billingMonth, billingYear, profit };
+      }),
+    );
+  }
+
+  // Oldest-to-newest list of `count` billing periods ending at
+  // (currentBillingMonth, currentBillingYear), wrapping the year backwards
+  // when a month goes below January.
+  private getTrailingPeriods(
+    currentBillingMonth: number,
+    currentBillingYear: number,
+    count: number,
+  ): { billingMonth: number; billingYear: number }[] {
+    const periods: { billingMonth: number; billingYear: number }[] = [];
+
+    for (let offset = count - 1; offset >= 0; offset--) {
+      let billingMonth = currentBillingMonth - offset;
+      let billingYear = currentBillingYear;
+
+      while (billingMonth <= 0) {
+        billingMonth += 12;
+        billingYear -= 1;
+      }
+
+      periods.push({ billingMonth, billingYear });
+    }
+
+    return periods;
+  }
+
+  private async computeProfitForPeriod(
+    companyId: string,
+    billingMonth: number,
+    billingYear: number,
+  ): Promise<PeriodProfit> {
+    const [{ collected: income }, expenseBreakdown] = await Promise.all([
+      this.dashboardRepository.getPaymentAmountTotals(
+        companyId,
+        billingMonth,
+        billingYear,
+      ),
+      this.getExpenseBreakdown(companyId, billingMonth, billingYear),
+    ]);
+
+    const expenses = expenseBreakdown.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+
+    return { income, expenses, profit: income - expenses, expenseBreakdown };
   }
 
   private getCurrentBillingPeriod(): {
