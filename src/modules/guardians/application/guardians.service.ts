@@ -3,10 +3,14 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { CompanyService } from '../../company/application/company.service';
 import { UserService } from '../../user/application/user.service';
+import { UserRole } from '../../user/domain/enums/user-role.enum';
+import { PasswordResetService } from '../../password-reset/application/password-reset.service';
 import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
 import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
 import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
@@ -22,25 +26,57 @@ import { UpdateGuardianDto } from '../infrastructure/api/dto/update-guardian.dto
 
 @Injectable()
 export class GuardianService {
+  private readonly logger = new Logger(GuardianService.name);
+
   constructor(
     @Inject(GUARDIAN_REPOSITORY)
     private readonly guardianRepository: IGuardianRepository,
     private readonly companyService: CompanyService,
     private readonly userService: UserService,
+    private readonly passwordResetService: PasswordResetService,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
   async create(dto: CreateGuardianDto, actor: AuditActor): Promise<Guardian> {
     await this.companyService.findById(dto.companyId);
 
-    if (dto.userId) {
-      await this.validateUserLink(dto.userId, dto.companyId);
-    }
-
     await this.assertDocumentAvailable(dto.document, dto.companyId);
     await this.assertEmailAvailable(dto.email, dto.companyId);
 
-    const guardian = await this.guardianRepository.create(dto);
+    let userId = dto.userId;
+    let newlyProvisionedUser = false;
+
+    if (userId) {
+      await this.validateUserLink(userId, dto.companyId);
+    } else {
+      // No account was supplied — give this guardian portal access automatically:
+      // reuse an existing account with the same email, or provision a fresh one
+      // (with an unusable random password) and email them an activation link.
+      const existingUser = await this.userService.findByEmail(dto.email);
+      if (existingUser) {
+        if (existingUser.role !== UserRole.GUARDIAN) {
+          throw new ConflictException(
+            `A user with email "${dto.email}" already exists with a different role`,
+          );
+        }
+        userId = existingUser.id;
+      } else {
+        const newUser = await this.userService.create({
+          companyId: dto.companyId,
+          role: UserRole.GUARDIAN,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          document: dto.document,
+          email: dto.email,
+          phone: dto.phone,
+          password: randomBytes(24).toString('hex'),
+        });
+        userId = newUser.id;
+        newlyProvisionedUser = true;
+      }
+    }
+
+    const guardian = await this.guardianRepository.create({ ...dto, userId });
 
     await this.auditLogsService.record({
       companyId: guardian.companyId,
@@ -51,6 +87,19 @@ export class GuardianService {
       entityId: guardian.id,
       description: `Se registró el acudiente ${guardian.firstName} ${guardian.lastName}`,
     });
+
+    if (newlyProvisionedUser) {
+      try {
+        const user = await this.userService.findById(userId);
+        await this.passwordResetService.createActivationLink(user);
+      } catch (err) {
+        // A flaky email provider shouldn't roll back a successfully created guardian.
+        this.logger.error(
+          `Failed to send activation email to guardian ${guardian.id}`,
+          err instanceof Error ? err.stack : err,
+        );
+      }
+    }
 
     return guardian;
   }
@@ -67,6 +116,10 @@ export class GuardianService {
     }
 
     return guardian;
+  }
+
+  async findByUserId(userId: string): Promise<Guardian | null> {
+    return this.guardianRepository.findByUserId(userId);
   }
 
   async update(

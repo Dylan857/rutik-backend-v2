@@ -14,6 +14,7 @@ export interface PaymentStatusCounts {
   partial: number;
   pending: number;
   overdue: number;
+  inReview: number;
   totalStudents: number;
 }
 

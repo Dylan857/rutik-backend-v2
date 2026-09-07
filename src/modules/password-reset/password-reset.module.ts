@@ -22,5 +22,6 @@ import { MailModule } from '../../shared/mail/mail.module';
       useClass: VerificationCodeRepositoryImpl,
     },
   ],
+  exports: [PasswordResetService],
 })
 export class PasswordResetModule {}

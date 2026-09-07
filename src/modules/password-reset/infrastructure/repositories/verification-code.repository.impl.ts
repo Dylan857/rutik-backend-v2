@@ -27,6 +27,13 @@ export class VerificationCodeRepositoryImpl implements IVerificationCodeReposito
     });
   }
 
+  async findByHash(
+    codeHash: string,
+    purpose: VerificationPurpose,
+  ): Promise<VerificationCode | null> {
+    return this.repository.findOne({ where: { codeHash, purpose } });
+  }
+
   async incrementAttempts(id: string): Promise<void> {
     await this.repository.increment({ id }, 'attempts', 1);
   }

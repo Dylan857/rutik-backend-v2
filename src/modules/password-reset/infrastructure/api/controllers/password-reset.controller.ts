@@ -4,6 +4,7 @@ import { PasswordResetService } from '../../../application/password-reset.servic
 import { RequestPasswordResetDto } from '../dto/request-password-reset.dto';
 import { VerifyResetCodeDto } from '../dto/verify-reset-code.dto';
 import { ResetPasswordDto } from '../dto/reset-password.dto';
+import { ActivateAccountDto } from '../dto/activate-account.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -50,5 +51,18 @@ export class PasswordResetController {
       dto.newPassword,
     );
     return { message: 'Password updated successfully' };
+  }
+
+  @Post('activate-account')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Set the initial password for an account using an activation link token',
+  })
+  @ApiOkResponse({ description: 'Account activated' })
+  async activateAccount(
+    @Body() dto: ActivateAccountDto,
+  ): Promise<{ message: string }> {
+    await this.passwordResetService.activateAccount(dto.token, dto.newPassword);
+    return { message: 'Account activated successfully' };
   }
 }

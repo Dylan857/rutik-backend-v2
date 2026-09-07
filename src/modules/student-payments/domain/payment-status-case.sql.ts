@@ -12,6 +12,7 @@ import { PaymentStatus } from './enums/payment-status.enum';
  */
 export const PAYMENT_STATUS_CASE = `
   CASE
+    WHEN payment.submittedAt IS NOT NULL THEN '${PaymentStatus.IN_REVIEW}'
     WHEN payment.amountPaid >= payment.monthlyFee THEN '${PaymentStatus.PAID}'
     WHEN payment.amountPaid > 0 THEN '${PaymentStatus.PARTIAL}'
     WHEN payment.dueDate IS NOT NULL AND payment.dueDate < CURRENT_DATE THEN '${PaymentStatus.OVERDUE}'

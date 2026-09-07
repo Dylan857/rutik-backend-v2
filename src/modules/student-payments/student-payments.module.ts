@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompanyModule } from '../company/company.module';
 import { StudentsModule } from '../students/students.module';
+import { StudentGuardiansModule } from '../student-guardians/student-guardians.module';
+import { PaymentAccountsModule } from '../payment-accounts/payment-accounts.module';
+import { CloudinaryModule } from '../../shared/cloudinary/cloudinary.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { StudentPayment } from './domain/student-payment.entity';
@@ -15,6 +18,9 @@ import { StudentPaymentController } from './infrastructure/api/controllers/stude
     TypeOrmModule.forFeature([StudentPayment]),
     CompanyModule,
     StudentsModule,
+    StudentGuardiansModule,
+    PaymentAccountsModule,
+    CloudinaryModule,
     NotificationsModule,
     AuditLogsModule,
   ],

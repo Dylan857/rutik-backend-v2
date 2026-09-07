@@ -96,6 +96,7 @@ export class StudentPaymentRepositoryImpl implements IStudentPaymentRepository {
       partial: 0,
       pending: 0,
       overdue: 0,
+      inReview: 0,
       totalStudents: 0,
     };
 
@@ -106,6 +107,7 @@ export class StudentPaymentRepositoryImpl implements IStudentPaymentRepository {
       if (row.status === PaymentStatus.PAID) counts.paid = count;
       else if (row.status === PaymentStatus.PARTIAL) counts.partial = count;
       else if (row.status === PaymentStatus.OVERDUE) counts.overdue = count;
+      else if (row.status === PaymentStatus.IN_REVIEW) counts.inReview = count;
       else counts.pending = count;
     }
 

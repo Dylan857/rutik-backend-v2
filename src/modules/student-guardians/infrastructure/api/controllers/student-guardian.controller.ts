@@ -34,6 +34,7 @@ import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { CreateStudentGuardianDto } from '../dto/create-student-guardian.dto';
 import { UpdateStudentGuardianDto } from '../dto/update-student-guardian.dto';
 import { StudentGuardianResponseDto } from '../dto/student-guardian-response.dto';
+import { MyStudentResponseDto } from '../dto/my-student-response.dto';
 
 @ApiTags('Student Guardians')
 @Controller('student-guardians')
@@ -111,6 +112,40 @@ export class StudentGuardianController {
       isPrimary,
     });
     return plainToInstance(StudentGuardianResponseDto, relations, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  // Must be declared before :id to avoid "me" being parsed as a UUID
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List the students linked to the currently authenticated guardian',
+  })
+  @ApiOkResponse({ type: [MyStudentResponseDto] })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async findMyStudents(
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<MyStudentResponseDto[]> {
+    const entries = await this.studentGuardianService.findMyStudents(
+      currentUser.sub,
+    );
+    const flattened = entries.map((entry) => ({
+      studentGuardianId: entry.relation.id,
+      studentId: entry.student.id,
+      relationshipType: entry.relation.relationshipType,
+      isPrimary: entry.relation.isPrimary,
+      firstName: entry.student.firstName,
+      lastName: entry.student.lastName,
+      grade: entry.student.grade,
+      status: entry.student.status,
+      scheduleName: entry.scheduleName,
+      pickupTime: entry.pickupTime,
+      driverFirstName: entry.driverFirstName,
+      driverLastName: entry.driverLastName,
+    }));
+    return plainToInstance(MyStudentResponseDto, flattened, {
       excludeExtraneousValues: true,
     });
   }

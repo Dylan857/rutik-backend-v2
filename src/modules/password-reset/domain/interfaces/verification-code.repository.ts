@@ -7,6 +7,11 @@ export interface IVerificationCodeRepository {
     userId: string,
     purpose: VerificationPurpose,
   ): Promise<VerificationCode | null>;
+  /** Direct lookup by exact hash — for deterministic (non-bcrypt) hashes like account-activation tokens. */
+  findByHash(
+    codeHash: string,
+    purpose: VerificationPurpose,
+  ): Promise<VerificationCode | null>;
   incrementAttempts(id: string): Promise<void>;
   deleteByUserAndPurpose(
     userId: string,

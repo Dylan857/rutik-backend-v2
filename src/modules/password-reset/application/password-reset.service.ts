@@ -1,8 +1,10 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { randomInt } from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes, randomInt, createHash } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { MailService } from '../../../shared/mail/mail.service';
 import { UserService } from '../../user/application/user.service';
+import { User } from '../../user/domain/user.entity';
 import { VerificationPurpose } from '../domain/enums/verification-purpose.enum';
 import { VerificationCode } from '../domain/verification-code.entity';
 import {
@@ -14,6 +16,12 @@ const BCRYPT_ROUNDS = 10;
 const CODE_EXPIRATION_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
 const INVALID_CODE_MESSAGE = 'Invalid or expired code';
+const ACTIVATION_TOKEN_EXPIRATION_DAYS = 7;
+const INVALID_TOKEN_MESSAGE = 'Invalid or expired activation link';
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 @Injectable()
 export class PasswordResetService {
@@ -22,6 +30,7 @@ export class PasswordResetService {
     private readonly verificationCodeRepository: IVerificationCodeRepository,
     private readonly userService: UserService,
     private readonly mailService: MailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async requestReset(email: string): Promise<void> {
@@ -66,6 +75,45 @@ export class PasswordResetService {
     await this.verificationCodeRepository.deleteByUserAndPurpose(
       user.userId,
       VerificationPurpose.PASSWORD_RESET,
+    );
+  }
+
+  async createActivationLink(user: User): Promise<void> {
+    await this.verificationCodeRepository.deleteByUserAndPurpose(
+      user.id,
+      VerificationPurpose.ACCOUNT_ACTIVATION,
+    );
+
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(
+      Date.now() + ACTIVATION_TOKEN_EXPIRATION_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    await this.verificationCodeRepository.create({
+      userId: user.id,
+      codeHash: hashToken(token),
+      purpose: VerificationPurpose.ACCOUNT_ACTIVATION,
+      expiresAt,
+    });
+
+    const activationUrl = `${this.configService.get<string>('app.parentsAppUrl')}/set-password?token=${token}`;
+    await this.mailService.sendGuardianWelcome(user.email, user.firstName, activationUrl);
+  }
+
+  async activateAccount(token: string, newPassword: string): Promise<void> {
+    const record = await this.verificationCodeRepository.findByHash(
+      hashToken(token),
+      VerificationPurpose.ACCOUNT_ACTIVATION,
+    );
+
+    if (!record || record.expiresAt < new Date()) {
+      throw new BadRequestException(INVALID_TOKEN_MESSAGE);
+    }
+
+    await this.userService.updatePassword(record.userId, newPassword);
+    await this.verificationCodeRepository.deleteByUserAndPurpose(
+      record.userId,
+      VerificationPurpose.ACCOUNT_ACTIVATION,
     );
   }
 
