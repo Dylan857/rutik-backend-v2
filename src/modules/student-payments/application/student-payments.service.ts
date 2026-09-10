@@ -99,6 +99,7 @@ export class StudentPaymentsService {
     private readonly companyService: CompanyService,
     @Inject(forwardRef(() => StudentService))
     private readonly studentService: StudentService,
+    @Inject(forwardRef(() => StudentGuardianService))
     private readonly studentGuardianService: StudentGuardianService,
     private readonly paymentAccountsService: PaymentAccountsService,
     private readonly cloudinaryService: CloudinaryService,
