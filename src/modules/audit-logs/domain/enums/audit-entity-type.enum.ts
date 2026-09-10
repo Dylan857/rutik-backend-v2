@@ -13,4 +13,5 @@ export enum AuditEntityType {
   FUEL_LOG = 'FUEL_LOG',
   MAINTENANCE = 'MAINTENANCE',
   USER = 'USER',
+  PAYMENT_ACCOUNT = 'PAYMENT_ACCOUNT',
 }

@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -9,6 +11,10 @@ import { CompanyService } from '../../company/application/company.service';
 import { CompanyStatus } from '../../company/domain/enums/company-status.enum';
 import { StudentService } from '../../students/application/students.service';
 import { StudentStatus } from '../../students/domain/enums/student-status.enum';
+import { StudentGuardianService } from '../../student-guardians/application/student-guardians.service';
+import { PaymentAccountsService } from '../../payment-accounts/application/payment-accounts.service';
+import { PaymentAccountType } from '../../payment-accounts/domain/enums/payment-account-type.enum';
+import { CloudinaryService } from '../../../shared/cloudinary/cloudinary.service';
 import { NotificationsService } from '../../notifications/application/notifications.service';
 import { NotificationType } from '../../notifications/domain/enums/notification-type.enum';
 import { NotificationSeverity } from '../../notifications/domain/enums/notification-severity.enum';
@@ -19,6 +25,7 @@ import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type
 import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
 import { StudentPayment } from '../domain/student-payment.entity';
 import { PaymentStatus } from '../domain/enums/payment-status.enum';
+import { PaymentMethod } from '../domain/enums/payment-method.enum';
 import {
   IStudentPaymentRepository,
   PaymentAmountTotals,
@@ -28,6 +35,9 @@ import {
 } from '../domain/interfaces/student-payment.repository';
 import { CreateStudentPaymentDto } from '../infrastructure/api/dto/create-student-payment.dto';
 import { UpdateStudentPaymentDto } from '../infrastructure/api/dto/update-student-payment.dto';
+import { SubmitReceiptDto } from '../infrastructure/api/dto/submit-receipt.dto';
+import { ApprovePaymentDto } from '../infrastructure/api/dto/approve-payment.dto';
+import { RejectPaymentDto } from '../infrastructure/api/dto/reject-payment.dto';
 import {
   computeDueDate,
   getNextBillingPeriod,
@@ -87,7 +97,11 @@ export class StudentPaymentsService {
     @Inject(STUDENT_PAYMENT_REPOSITORY)
     private readonly paymentRepository: IStudentPaymentRepository,
     private readonly companyService: CompanyService,
+    @Inject(forwardRef(() => StudentService))
     private readonly studentService: StudentService,
+    private readonly studentGuardianService: StudentGuardianService,
+    private readonly paymentAccountsService: PaymentAccountsService,
+    private readonly cloudinaryService: CloudinaryService,
     private readonly notificationsService: NotificationsService,
     private readonly auditLogsService: AuditLogsService,
   ) {}
@@ -129,6 +143,7 @@ export class StudentPaymentsService {
       dueDate,
       providedPaidAt: dto.paidAt ? new Date(dto.paidAt) : null,
       existingPaidAt: null,
+      submittedAt: null,
     });
 
     const created = await this.paymentRepository.create({
@@ -202,6 +217,7 @@ export class StudentPaymentsService {
             : null
           : undefined,
       existingPaidAt: current.paidAt,
+      submittedAt: current.submittedAt,
     });
 
     const updated = await this.paymentRepository.update(id, {
@@ -244,6 +260,79 @@ export class StudentPaymentsService {
       entityType: AuditEntityType.STUDENT_PAYMENT,
       entityId: payment.id,
       description: `Se eliminó el pago de ${student.firstName} ${student.lastName}`,
+    });
+  }
+
+  /**
+   * Called by StudentService.update BEFORE persisting a monthlyFee change, so
+   * an invalid change (amountPaid would exceed the new fee) rejects the whole
+   * student update instead of leaving it half-applied.
+   *
+   * Returns the student's payment for the current calendar period only when
+   * it exists and is still open (PENDING/PARTIAL/OVERDUE) — null when there's
+   * nothing to sync (no payment generated yet for this period) or the period
+   * is already closed out (PAID) or mid-review (IN_REVIEW), which must never
+   * be touched retroactively.
+   */
+  async getOpenPaymentToSyncOnFeeChange(
+    studentId: string,
+    newMonthlyFee: number,
+  ): Promise<StudentPayment | null> {
+    const period = this.getCurrentBillingPeriod();
+    const payment = await this.paymentRepository.findByStudentAndPeriod(
+      studentId,
+      period.billingMonth,
+      period.billingYear,
+    );
+
+    if (
+      !payment ||
+      payment.status === PaymentStatus.PAID ||
+      payment.status === PaymentStatus.IN_REVIEW
+    ) {
+      return null;
+    }
+
+    this.assertAmountPaidNotExceedingFee(newMonthlyFee, payment.amountPaid);
+
+    return payment;
+  }
+
+  /**
+   * Applies a student's new monthlyFee to the open payment previously
+   * returned by getOpenPaymentToSyncOnFeeChange. Called AFTER the student
+   * update is persisted. dueDate stays frozen — only monthlyFee and the
+   * fields derived from it (status/paidAt) change.
+   */
+  async applyFeeChangeToOpenPayment(
+    payment: StudentPayment,
+    newMonthlyFee: number,
+    actor: AuditActor,
+  ): Promise<void> {
+    const computed = this.deriveComputedFields({
+      monthlyFee: newMonthlyFee,
+      amountPaid: payment.amountPaid,
+      dueDate: payment.dueDate,
+      providedPaidAt: undefined,
+      existingPaidAt: payment.paidAt,
+      submittedAt: payment.submittedAt,
+    });
+
+    const updated = await this.paymentRepository.update(payment.id, {
+      monthlyFee: newMonthlyFee,
+      status: computed.status,
+      paidAt: computed.paidAt,
+    });
+
+    const student = await this.studentService.findById(updated.studentId);
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se actualizó la tarifa del pago de ${student.firstName} ${student.lastName} a ${newMonthlyFee} por cambio en la mensualidad del estudiante`,
     });
   }
 
@@ -518,6 +607,7 @@ export class StudentPaymentsService {
         dueDate,
         providedPaidAt: null,
         existingPaidAt: null,
+        submittedAt: null,
       });
 
       await this.paymentRepository.create({
@@ -571,11 +661,16 @@ export class StudentPaymentsService {
     dueDate: string | null;
     providedPaidAt?: Date | null;
     existingPaidAt: Date | null;
+    // Non-null while a guardian-submitted receipt awaits admin review —
+    // overrides every other status regardless of amountPaid.
+    submittedAt: Date | null;
   }): ComputedFields {
     const outstandingBalance = Math.max(0, input.monthlyFee - input.amountPaid);
 
     let status: PaymentStatus;
-    if (input.amountPaid >= input.monthlyFee) {
+    if (input.submittedAt) {
+      status = PaymentStatus.IN_REVIEW;
+    } else if (input.amountPaid >= input.monthlyFee) {
       status = PaymentStatus.PAID;
     } else if (input.amountPaid > 0) {
       status = PaymentStatus.PARTIAL;
@@ -610,7 +705,201 @@ export class StudentPaymentsService {
       dueDate: payment.dueDate,
       providedPaidAt: undefined,
       existingPaidAt: payment.paidAt,
+      submittedAt: payment.submittedAt,
     });
+  }
+
+  private mapAccountTypeToPaymentMethod(type?: PaymentAccountType): PaymentMethod {
+    switch (type) {
+      case PaymentAccountType.NEQUI:
+        return PaymentMethod.NEQUI;
+      case PaymentAccountType.DAVIPLATA:
+        return PaymentMethod.DAVIPLATA;
+      default:
+        return PaymentMethod.TRANSFER;
+    }
+  }
+
+  /**
+   * Guardian submits a transfer receipt (photo + reference) for review.
+   * Rejected only when the period is already PAID or already IN_REVIEW —
+   * every other status (PENDING/PARTIAL/OVERDUE, including one carrying a
+   * previous rejectionReason) is reportable.
+   */
+  async submitReceipt(
+    id: string,
+    dto: SubmitReceiptDto,
+    file: Express.Multer.File,
+    actor: AuditActor,
+  ): Promise<StudentPayment> {
+    const payment = await this.findById(id);
+
+    const isOwner = await this.studentGuardianService.isGuardianOfStudent(
+      actor.userId,
+      payment.studentId,
+    );
+    if (!isOwner) {
+      throw new ForbiddenException(
+        'You are not a guardian of the student this payment belongs to',
+      );
+    }
+
+    if (payment.status === PaymentStatus.PAID) {
+      throw new ConflictException('This period is already paid');
+    }
+    if (payment.status === PaymentStatus.IN_REVIEW) {
+      throw new ConflictException(
+        'A receipt for this period is already awaiting review',
+      );
+    }
+
+    const paymentAccount = await this.paymentAccountsService.findById(
+      dto.paymentAccountId,
+    );
+    if (paymentAccount.companyId !== payment.companyId) {
+      throw new BadRequestException(
+        'Payment account does not belong to this payment\'s company',
+      );
+    }
+
+    const receiptUrl = await this.cloudinaryService.uploadReceipt(file);
+    const submittedAt = new Date();
+
+    const updated = await this.paymentRepository.update(id, {
+      receiptUrl,
+      receiptReference: dto.referenceNumber,
+      paymentAccountId: dto.paymentAccountId,
+      submittedAt,
+      rejectionReason: null,
+      status: PaymentStatus.IN_REVIEW,
+    });
+
+    const student = await this.studentService.findById(updated.studentId);
+
+    await this.notificationsService.create({
+      companyId: updated.companyId,
+      type: NotificationType.PAYMENT_RECEIPT_SUBMITTED,
+      severity: NotificationSeverity.INFO,
+      title: 'Nuevo comprobante de pago',
+      message: `${student.firstName} ${student.lastName} envió un comprobante para ${updated.billingMonth}/${updated.billingYear}.`,
+      sourceType: NotificationSourceType.STUDENT_PAYMENT,
+      sourceId: updated.id,
+    });
+
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se envió un comprobante de pago para ${student.firstName} ${student.lastName}`,
+    });
+
+    return this.attachComputed(updated, this.recompute(updated));
+  }
+
+  /** Admin approves a receipt under review — records the payment for real. */
+  async approvePayment(
+    id: string,
+    dto: ApprovePaymentDto,
+    actor: AuditActor,
+  ): Promise<StudentPayment> {
+    const current = await this.paymentRepository.findById(id);
+    if (!current) {
+      throw new NotFoundException(`Student payment with ID "${id}" not found`);
+    }
+    if (!current.submittedAt) {
+      throw new ConflictException(
+        'This payment has no receipt currently awaiting review',
+      );
+    }
+
+    const amountPaid = dto.amountPaid ?? current.monthlyFee;
+    this.assertAmountPaidNotExceedingFee(current.monthlyFee, amountPaid);
+
+    const paymentAccount = current.paymentAccountId
+      ? await this.paymentAccountsService.findById(current.paymentAccountId)
+      : null;
+
+    const computed = this.deriveComputedFields({
+      monthlyFee: current.monthlyFee,
+      amountPaid,
+      dueDate: current.dueDate,
+      providedPaidAt: current.submittedAt,
+      existingPaidAt: current.paidAt,
+      submittedAt: null,
+    });
+
+    const updated = await this.paymentRepository.update(id, {
+      amountPaid,
+      paymentMethod: this.mapAccountTypeToPaymentMethod(paymentAccount?.type),
+      status: computed.status,
+      paidAt: computed.paidAt,
+      submittedAt: null,
+      reviewedAt: new Date(),
+      reviewedBy: actor.userId,
+    });
+
+    const student = await this.studentService.findById(updated.studentId);
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se aprobó el comprobante de pago de ${student.firstName} ${student.lastName}`,
+    });
+
+    return this.attachComputed(updated, computed);
+  }
+
+  /** Admin rejects a receipt under review — reverts to PENDING/OVERDUE, keeping the reason. */
+  async rejectPayment(
+    id: string,
+    dto: RejectPaymentDto,
+    actor: AuditActor,
+  ): Promise<StudentPayment> {
+    const current = await this.paymentRepository.findById(id);
+    if (!current) {
+      throw new NotFoundException(`Student payment with ID "${id}" not found`);
+    }
+    if (!current.submittedAt) {
+      throw new ConflictException(
+        'This payment has no receipt currently awaiting review',
+      );
+    }
+
+    const computed = this.deriveComputedFields({
+      monthlyFee: current.monthlyFee,
+      amountPaid: current.amountPaid,
+      dueDate: current.dueDate,
+      providedPaidAt: undefined,
+      existingPaidAt: current.paidAt,
+      submittedAt: null,
+    });
+
+    const updated = await this.paymentRepository.update(id, {
+      submittedAt: null,
+      rejectionReason: dto.reason,
+      reviewedAt: new Date(),
+      reviewedBy: actor.userId,
+      status: computed.status,
+    });
+
+    const student = await this.studentService.findById(updated.studentId);
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se rechazó el comprobante de pago de ${student.firstName} ${student.lastName}: ${dto.reason}`,
+    });
+
+    return this.attachComputed(updated, computed);
   }
 
   private attachComputed(

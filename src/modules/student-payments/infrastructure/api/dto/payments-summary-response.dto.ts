@@ -28,6 +28,13 @@ class PaymentStatusSummaryDto {
   overdue: number;
 
   @ApiProperty({
+    example: 4,
+    description: 'Students with a submitted receipt awaiting admin review',
+  })
+  @Expose()
+  inReview: number;
+
+  @ApiProperty({
     example: 128,
     description: 'Total students billed for the filtered period',
   })

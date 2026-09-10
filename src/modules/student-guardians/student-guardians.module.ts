@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StudentsModule } from '../students/students.module';
 import { GuardiansModule } from '../guardians/guardians.module';
+import { SchoolSchedulesModule } from '../school-schedules/school-schedules.module';
+import { SchoolAssignmentsModule } from '../school-assignments/school-assignments.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { StudentGuardian } from './domain/student-guardian.entity';
 import { STUDENT_GUARDIAN_REPOSITORY } from './domain/interfaces/student-guardian.repository';
@@ -14,6 +16,8 @@ import { StudentGuardianController } from './infrastructure/api/controllers/stud
     TypeOrmModule.forFeature([StudentGuardian]),
     StudentsModule,
     GuardiansModule,
+    SchoolSchedulesModule,
+    SchoolAssignmentsModule,
     AuditLogsModule,
   ],
   controllers: [StudentGuardianController],

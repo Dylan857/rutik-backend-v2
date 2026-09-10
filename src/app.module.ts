@@ -17,6 +17,7 @@ import { SchoolAssignmentsModule } from './modules/school-assignments/school-ass
 import { SchoolRoutesModule } from './modules/school-routes/school-routes.module';
 import { RouteStopsModule } from './modules/route-stops/route-stops.module';
 import { StudentPaymentsModule } from './modules/student-payments/student-payments.module';
+import { PaymentAccountsModule } from './modules/payment-accounts/payment-accounts.module';
 import { DriverPaymentsModule } from './modules/driver-payments/driver-payments.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { PasswordResetModule } from './modules/password-reset/password-reset.module';
@@ -28,6 +29,7 @@ import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
 import googleMapsConfig from './shared/config/google-maps.config';
 import mailConfig from './shared/config/mail.config';
+import cloudinaryConfig from './shared/config/cloudinary.config';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import mailConfig from './shared/config/mail.config';
         jwtConfig,
         googleMapsConfig,
         mailConfig,
+        cloudinaryConfig,
       ],
       envFilePath: '.env',
     }),
@@ -59,6 +62,7 @@ import mailConfig from './shared/config/mail.config';
     SchoolRoutesModule,
     RouteStopsModule,
     StudentPaymentsModule,
+    PaymentAccountsModule,
     DriverPaymentsModule,
     DashboardModule,
     PasswordResetModule,

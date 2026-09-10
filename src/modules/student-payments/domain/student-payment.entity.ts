@@ -93,4 +93,40 @@ export class StudentPayment extends BaseEntity {
 
   @Column({ type: 'text', nullable: true, default: null })
   notes: string | null;
+
+  // ── Manual transfer receipt (guardian-submitted, admin-reviewed) ──────────
+
+  // Cloudinary secure URL of the uploaded receipt photo.
+  @Column({ name: 'receipt_url', type: 'text', nullable: true, default: null })
+  receiptUrl: string | null;
+
+  @Column({
+    name: 'receipt_reference',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+    default: null,
+  })
+  receiptReference: string | null;
+
+  @Column({ name: 'payment_account_id', type: 'uuid', nullable: true, default: null })
+  paymentAccountId: string | null;
+
+  // Set when the guardian submits a receipt, cleared when an admin approves
+  // or rejects it. Non-null is what makes deriveComputedFields report
+  // IN_REVIEW regardless of amountPaid — see student-payments.service.ts.
+  @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true, default: null })
+  submittedAt: Date | null;
+
+  @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true, default: null })
+  reviewedAt: Date | null;
+
+  @Column({ name: 'reviewed_by', type: 'uuid', nullable: true, default: null })
+  reviewedBy: string | null;
+
+  // Kept (not cleared) after a rejection so the guardian's next visit can
+  // show why the previous attempt was rejected, even though submittedAt is
+  // cleared and status has already reverted to PENDING/OVERDUE.
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true, default: null })
+  rejectionReason: string | null;
 }

@@ -11,12 +11,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -37,6 +41,9 @@ import { StudentPaymentsService } from '../../../application/student-payments.se
 import { PaymentStatus } from '../../../domain/enums/payment-status.enum';
 import { CreateStudentPaymentDto } from '../dto/create-student-payment.dto';
 import { UpdateStudentPaymentDto } from '../dto/update-student-payment.dto';
+import { SubmitReceiptDto } from '../dto/submit-receipt.dto';
+import { ApprovePaymentDto } from '../dto/approve-payment.dto';
+import { RejectPaymentDto } from '../dto/reject-payment.dto';
 import { StudentPaymentResponseDto } from '../dto/student-payment-response.dto';
 import { GenerateBillingCycleResponseDto } from '../dto/billing-cycle-response.dto';
 import { PaymentsSummaryResponseDto } from '../dto/payments-summary-response.dto';
@@ -116,8 +123,11 @@ export class StudentPaymentController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List payment records with optional filters' })
   @ApiOkResponse({ type: [StudentPaymentResponseDto] })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiQuery({
     name: 'companyId',
     required: false,
@@ -249,13 +259,99 @@ export class StudentPaymentController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a payment record by ID' })
   @ApiOkResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StudentPaymentResponseDto> {
     const payment = await this.paymentsService.findById(id);
+    return plainToInstance(StudentPaymentResponseDto, payment, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Post(':id/receipts')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiBearerAuth('access-token')
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Guardian submits a transfer receipt for a payment period',
+    description:
+      'Uploads the receipt photo and records the reference number + chosen payment ' +
+      'account. Sets status to IN_REVIEW until an admin approves or rejects it. ' +
+      'Rejected with 409 when the period is already PAID or already IN_REVIEW.',
+  })
+  @ApiCreatedResponse({ type: StudentPaymentResponseDto })
+  @ApiNotFoundResponse({ description: 'Payment record not found' })
+  @ApiConflictResponse({ description: 'Period already paid or already in review' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async submitReceipt(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SubmitReceiptDto,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<StudentPaymentResponseDto> {
+    if (!file) {
+      throw new BadRequestException('A receipt photo (field "file") is required');
+    }
+    const payment = await this.paymentsService.submitReceipt(id, dto, file, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
+    return plainToInstance(StudentPaymentResponseDto, payment, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Post(':id/approve')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Admin approves a receipt currently under review' })
+  @ApiOkResponse({ type: StudentPaymentResponseDto })
+  @ApiNotFoundResponse({ description: 'Payment record not found' })
+  @ApiConflictResponse({ description: 'No receipt is currently awaiting review' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async approve(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApprovePaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<StudentPaymentResponseDto> {
+    const payment = await this.paymentsService.approvePayment(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
+    return plainToInstance(StudentPaymentResponseDto, payment, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  @Post(':id/reject')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Admin rejects a receipt currently under review' })
+  @ApiOkResponse({ type: StudentPaymentResponseDto })
+  @ApiNotFoundResponse({ description: 'Payment record not found' })
+  @ApiConflictResponse({ description: 'No receipt is currently awaiting review' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  async reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectPaymentDto,
+    @CurrentUser() currentUser: JwtPayload,
+  ): Promise<StudentPaymentResponseDto> {
+    const payment = await this.paymentsService.rejectPayment(id, dto, {
+      userId: currentUser.sub,
+      email: currentUser.email,
+    });
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });

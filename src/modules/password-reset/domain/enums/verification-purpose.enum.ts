@@ -1,3 +1,4 @@
 export enum VerificationPurpose {
   PASSWORD_RESET = 'PASSWORD_RESET',
+  ACCOUNT_ACTIVATION = 'ACCOUNT_ACTIVATION',
 }
