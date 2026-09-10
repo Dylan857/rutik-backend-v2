@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -96,6 +97,7 @@ export class StudentPaymentsService {
     @Inject(STUDENT_PAYMENT_REPOSITORY)
     private readonly paymentRepository: IStudentPaymentRepository,
     private readonly companyService: CompanyService,
+    @Inject(forwardRef(() => StudentService))
     private readonly studentService: StudentService,
     private readonly studentGuardianService: StudentGuardianService,
     private readonly paymentAccountsService: PaymentAccountsService,
@@ -258,6 +260,79 @@ export class StudentPaymentsService {
       entityType: AuditEntityType.STUDENT_PAYMENT,
       entityId: payment.id,
       description: `Se eliminó el pago de ${student.firstName} ${student.lastName}`,
+    });
+  }
+
+  /**
+   * Called by StudentService.update BEFORE persisting a monthlyFee change, so
+   * an invalid change (amountPaid would exceed the new fee) rejects the whole
+   * student update instead of leaving it half-applied.
+   *
+   * Returns the student's payment for the current calendar period only when
+   * it exists and is still open (PENDING/PARTIAL/OVERDUE) — null when there's
+   * nothing to sync (no payment generated yet for this period) or the period
+   * is already closed out (PAID) or mid-review (IN_REVIEW), which must never
+   * be touched retroactively.
+   */
+  async getOpenPaymentToSyncOnFeeChange(
+    studentId: string,
+    newMonthlyFee: number,
+  ): Promise<StudentPayment | null> {
+    const period = this.getCurrentBillingPeriod();
+    const payment = await this.paymentRepository.findByStudentAndPeriod(
+      studentId,
+      period.billingMonth,
+      period.billingYear,
+    );
+
+    if (
+      !payment ||
+      payment.status === PaymentStatus.PAID ||
+      payment.status === PaymentStatus.IN_REVIEW
+    ) {
+      return null;
+    }
+
+    this.assertAmountPaidNotExceedingFee(newMonthlyFee, payment.amountPaid);
+
+    return payment;
+  }
+
+  /**
+   * Applies a student's new monthlyFee to the open payment previously
+   * returned by getOpenPaymentToSyncOnFeeChange. Called AFTER the student
+   * update is persisted. dueDate stays frozen — only monthlyFee and the
+   * fields derived from it (status/paidAt) change.
+   */
+  async applyFeeChangeToOpenPayment(
+    payment: StudentPayment,
+    newMonthlyFee: number,
+    actor: AuditActor,
+  ): Promise<void> {
+    const computed = this.deriveComputedFields({
+      monthlyFee: newMonthlyFee,
+      amountPaid: payment.amountPaid,
+      dueDate: payment.dueDate,
+      providedPaidAt: undefined,
+      existingPaidAt: payment.paidAt,
+      submittedAt: payment.submittedAt,
+    });
+
+    const updated = await this.paymentRepository.update(payment.id, {
+      monthlyFee: newMonthlyFee,
+      status: computed.status,
+      paidAt: computed.paidAt,
+    });
+
+    const student = await this.studentService.findById(updated.studentId);
+    await this.auditLogsService.record({
+      companyId: updated.companyId,
+      actorUserId: actor.userId,
+      actorEmail: actor.email,
+      action: AuditAction.UPDATED,
+      entityType: AuditEntityType.STUDENT_PAYMENT,
+      entityId: updated.id,
+      description: `Se actualizó la tarifa del pago de ${student.firstName} ${student.lastName} a ${newMonthlyFee} por cambio en la mensualidad del estudiante`,
     });
   }
 

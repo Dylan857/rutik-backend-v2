@@ -1,9 +1,10 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompanyModule } from '../company/company.module';
 import { SchoolModule } from '../school/school.module';
 import { SchoolSchedulesModule } from '../school-schedules/school-schedules.module';
 import { RouteStopsModule } from '../route-stops/route-stops.module';
+import { StudentPaymentsModule } from '../student-payments/student-payments.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { Student } from './domain/student.entity';
 import { STUDENT_REPOSITORY } from './domain/interfaces/student.repository';
@@ -18,6 +19,7 @@ import { StudentController } from './infrastructure/api/controllers/student.cont
     SchoolModule,
     SchoolSchedulesModule,
     RouteStopsModule,
+    forwardRef(() => StudentPaymentsModule),
     AuditLogsModule,
   ],
   controllers: [StudentController],

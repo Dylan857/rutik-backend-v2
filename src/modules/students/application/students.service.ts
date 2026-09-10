@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -8,6 +9,7 @@ import { CompanyService } from '../../company/application/company.service';
 import { SchoolService } from '../../school/application/school.service';
 import { SchoolScheduleService } from '../../school-schedules/application/school-schedules.service';
 import { RouteStopsService } from '../../route-stops/application/route-stops.service';
+import { StudentPaymentsService } from '../../student-payments/application/student-payments.service';
 import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
 import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
 import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
@@ -30,6 +32,8 @@ export class StudentService {
     private readonly schoolService: SchoolService,
     private readonly scheduleService: SchoolScheduleService,
     private readonly routeStopsService: RouteStopsService,
+    @Inject(forwardRef(() => StudentPaymentsService))
+    private readonly studentPaymentsService: StudentPaymentsService,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
@@ -110,6 +114,19 @@ export class StudentService {
     const tripTypeChanged =
       dto.tripType !== undefined && dto.tripType !== current.tripType;
 
+    const monthlyFeeChanged =
+      dto.monthlyFee !== undefined && dto.monthlyFee !== current.monthlyFee;
+
+    // Validated before persisting the student change so an invalid fee
+    // change (would push amountPaid over the new fee on an open payment)
+    // rejects the whole update instead of leaving it half-applied.
+    const openPaymentToSync = monthlyFeeChanged
+      ? await this.studentPaymentsService.getOpenPaymentToSyncOnFeeChange(
+          id,
+          dto.monthlyFee!,
+        )
+      : null;
+
     if (scheduleChanged) {
       await this.routeStopsService.removeStudentFromRoute(id);
     }
@@ -120,6 +137,14 @@ export class StudentService {
       await this.routeStopsService.addStudentToRoute(updated);
     } else if (tripTypeChanged) {
       await this.routeStopsService.refreshRouteForStudent(id);
+    }
+
+    if (openPaymentToSync) {
+      await this.studentPaymentsService.applyFeeChangeToOpenPayment(
+        openPaymentToSync,
+        dto.monthlyFee!,
+        actor,
+      );
     }
 
     await this.auditLogsService.record({

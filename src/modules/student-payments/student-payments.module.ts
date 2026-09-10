@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompanyModule } from '../company/company.module';
 import { StudentsModule } from '../students/students.module';
@@ -17,7 +17,7 @@ import { StudentPaymentController } from './infrastructure/api/controllers/stude
   imports: [
     TypeOrmModule.forFeature([StudentPayment]),
     CompanyModule,
-    StudentsModule,
+    forwardRef(() => StudentsModule),
     StudentGuardiansModule,
     PaymentAccountsModule,
     CloudinaryModule,
