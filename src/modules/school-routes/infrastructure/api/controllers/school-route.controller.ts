@@ -22,6 +22,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -38,6 +42,8 @@ export class SchoolRouteController {
   // No POST endpoint — routes are created automatically via SchoolAssignmentsService.
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List school routes with optional filters',
     description:
@@ -61,12 +67,13 @@ export class SchoolRouteController {
     description: 'Filter by status',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('schoolAssignmentId') schoolAssignmentId?: string,
     @Query('status') status?: RouteStatus,
   ): Promise<SchoolRouteResponseDto[]> {
     const routes = await this.schoolRoutesService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       schoolAssignmentId,
       status,
     });
@@ -76,6 +83,8 @@ export class SchoolRouteController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a school route by ID',
     description:
@@ -84,9 +93,11 @@ export class SchoolRouteController {
   @ApiOkResponse({ type: SchoolRouteResponseDto })
   @ApiNotFoundResponse({ description: 'School route not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SchoolRouteResponseDto> {
     const route = await this.schoolRoutesService.findById(id);
+    assertCompanyAccess(currentUser, route.companyId);
     return plainToInstance(SchoolRouteResponseDto, route, {
       excludeExtraneousValues: true,
     });

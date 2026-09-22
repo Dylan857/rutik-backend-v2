@@ -1,6 +1,8 @@
 import { RouteStop } from '../route-stop.entity';
 
 export interface RouteStopFilters {
+  // Route stops carry no companyId of their own — filtered through the parent route.
+  companyId?: string;
   schoolRouteId?: string;
   studentId?: string;
 }
@@ -15,6 +17,7 @@ export interface IRouteStopRepository {
   // Eager-loads the `student` relation — callers need `student.tripType` to
   // split stops into pickup/dropoff legs.
   findAll(filters: RouteStopFilters): Promise<RouteStop[]>;
+  // Loads the `schoolRoute` relation so callers can check tenant ownership.
   findById(id: string): Promise<RouteStop | null>;
   findByStudentId(studentId: string): Promise<RouteStop | null>;
   findByRouteAndStudent(

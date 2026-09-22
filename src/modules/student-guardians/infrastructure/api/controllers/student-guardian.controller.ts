@@ -29,6 +29,10 @@ import { plainToInstance } from 'class-transformer';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { StudentGuardianService } from '../../../application/student-guardians.service';
 import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { CreateStudentGuardianDto } from '../dto/create-student-guardian.dto';
@@ -71,6 +75,8 @@ export class StudentGuardianController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List student-guardian relationships with optional filters',
   })
@@ -98,6 +104,7 @@ export class StudentGuardianController {
     description: 'Filter by primary status (true | false)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('studentId') studentId?: string,
     @Query('guardianId') guardianId?: string,
     @Query('relationshipType') relationshipType?: RelationshipType,
@@ -106,6 +113,7 @@ export class StudentGuardianController {
     const isPrimary =
       isPrimaryStr !== undefined ? isPrimaryStr === 'true' : undefined;
     const relations = await this.studentGuardianService.findAll({
+      companyId: resolveCompanyScope(currentUser),
       studentId,
       guardianId,
       relationshipType,
@@ -151,13 +159,17 @@ export class StudentGuardianController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a student-guardian relationship by ID' })
   @ApiOkResponse({ type: StudentGuardianResponseDto })
   @ApiNotFoundResponse({ description: 'Relationship not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StudentGuardianResponseDto> {
     const relation = await this.studentGuardianService.findById(id);
+    assertCompanyAccess(currentUser, relation.student?.companyId);
     return plainToInstance(StudentGuardianResponseDto, relation, {
       excludeExtraneousValues: true,
     });

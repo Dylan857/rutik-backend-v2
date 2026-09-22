@@ -25,6 +25,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -63,6 +67,8 @@ export class SchoolController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List all active schools, optionally filtered by company',
   })
@@ -73,22 +79,29 @@ export class SchoolController {
     description: 'Filter schools by company UUID',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
   ): Promise<SchoolResponseDto[]> {
-    const schools = await this.schoolService.findAll(companyId);
+    const schools = await this.schoolService.findAll(
+      resolveCompanyScope(currentUser, companyId),
+    );
     return plainToInstance(SchoolResponseDto, schools, {
       excludeExtraneousValues: true,
     });
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a school by ID' })
   @ApiOkResponse({ type: SchoolResponseDto })
   @ApiNotFoundResponse({ description: 'School not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SchoolResponseDto> {
     const school = await this.schoolService.findById(id);
+    assertCompanyAccess(currentUser, school.companyId);
     return plainToInstance(SchoolResponseDto, school, {
       excludeExtraneousValues: true,
     });

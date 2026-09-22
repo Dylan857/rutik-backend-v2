@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -78,6 +82,8 @@ export class SchoolAssignmentController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List school assignments with optional filters' })
   @ApiOkResponse({ type: [SchoolAssignmentResponseDto] })
   @ApiQuery({
@@ -112,6 +118,7 @@ export class SchoolAssignmentController {
     description: 'Filter by status',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('schoolId') schoolId?: string,
     @Query('scheduleId') scheduleId?: string,
@@ -120,7 +127,7 @@ export class SchoolAssignmentController {
     @Query('status') status?: AssignmentStatus,
   ): Promise<SchoolAssignmentResponseDto[]> {
     const assignments = await this.assignmentsService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       schoolId,
       scheduleId,
       driverId,
@@ -133,13 +140,17 @@ export class SchoolAssignmentController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a school assignment by ID' })
   @ApiOkResponse({ type: SchoolAssignmentResponseDto })
   @ApiNotFoundResponse({ description: 'School assignment not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SchoolAssignmentResponseDto> {
     const assignment = await this.assignmentsService.findById(id);
+    assertCompanyAccess(currentUser, assignment.companyId);
     return plainToInstance(SchoolAssignmentResponseDto, assignment, {
       excludeExtraneousValues: true,
     });

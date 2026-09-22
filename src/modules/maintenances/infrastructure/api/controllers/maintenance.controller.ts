@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -25,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -72,6 +77,8 @@ export class MaintenanceController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List maintenances with optional filters' })
   @ApiOkResponse({ type: [MaintenanceResponseDto] })
   @ApiQuery({
@@ -101,6 +108,7 @@ export class MaintenanceController {
       'Search across vehicle plate/brand/model, workshop and description',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('vehicleId') vehicleId?: string,
     @Query('month') month?: string,
@@ -108,7 +116,7 @@ export class MaintenanceController {
     @Query('search') search?: string,
   ): Promise<MaintenanceResponseDto[]> {
     const maintenances = await this.maintenancesService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       vehicleId,
       month: month !== undefined ? Number(month) : undefined,
       year: year !== undefined ? Number(year) : undefined,
@@ -120,6 +128,8 @@ export class MaintenanceController {
   }
 
   @Get('summary')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get maintenance dashboard summary cards for a billing period',
   })
@@ -136,12 +146,18 @@ export class MaintenanceController {
     description: 'Year, defaults to current year',
   })
   async getSummary(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
   ): Promise<MaintenanceSummaryResponseDto> {
+    const scopedCompanyId = resolveCompanyScope(currentUser, companyId);
+    if (!scopedCompanyId) {
+      throw new BadRequestException('companyId is required');
+    }
+
     const summary = await this.maintenancesService.getSummary(
-      companyId,
+      scopedCompanyId,
       month !== undefined ? Number(month) : undefined,
       year !== undefined ? Number(year) : undefined,
     );
@@ -151,13 +167,17 @@ export class MaintenanceController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a maintenance by ID' })
   @ApiOkResponse({ type: MaintenanceResponseDto })
   @ApiNotFoundResponse({ description: 'Maintenance not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<MaintenanceResponseDto> {
     const maintenance = await this.maintenancesService.findById(id);
+    assertCompanyAccess(currentUser, maintenance.companyId);
     return plainToInstance(MaintenanceResponseDto, maintenance, {
       excludeExtraneousValues: true,
     });

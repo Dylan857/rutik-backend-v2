@@ -21,6 +21,7 @@ export class StudentGuardianRepositoryImpl implements IStudentGuardianRepository
 
   async findAll(filters: StudentGuardianFilters): Promise<StudentGuardian[]> {
     const where: Record<string, unknown> = {};
+    if (filters.companyId) where.student = { companyId: filters.companyId };
     if (filters.studentId) where.studentId = filters.studentId;
     if (filters.guardianId) where.guardianId = filters.guardianId;
     if (filters.relationshipType)
@@ -30,7 +31,10 @@ export class StudentGuardianRepositoryImpl implements IStudentGuardianRepository
   }
 
   async findById(id: string): Promise<StudentGuardian | null> {
-    return this.repository.findOne({ where: { id } });
+    return this.repository.findOne({
+      where: { id },
+      relations: { student: true },
+    });
   }
 
   async findByStudentAndGuardian(

@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -78,6 +82,8 @@ export class VehicleController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List vehicles with optional filters' })
   @ApiOkResponse({ type: [VehicleResponseDto] })
   @ApiQuery({
@@ -103,13 +109,14 @@ export class VehicleController {
     description: 'Filter by status',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('plate') plate?: string,
     @Query('vehicleType') vehicleType?: VehicleType,
     @Query('status') status?: VehicleStatus,
   ): Promise<VehicleResponseDto[]> {
     const vehicles = await this.vehiclesService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       plate,
       vehicleType,
       status,
@@ -120,6 +127,8 @@ export class VehicleController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a vehicle by ID with its full detail',
     description:
@@ -141,6 +150,7 @@ export class VehicleController {
     description: 'Fuel period year. Defaults to the current year.',
   })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
@@ -150,6 +160,7 @@ export class VehicleController {
       month !== undefined ? Number(month) : undefined,
       year !== undefined ? Number(year) : undefined,
     );
+    assertCompanyAccess(currentUser, detail.vehicle.companyId);
 
     return plainToInstance(
       VehicleDetailResponseDto,

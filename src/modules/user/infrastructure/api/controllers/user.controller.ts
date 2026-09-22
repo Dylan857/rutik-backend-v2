@@ -28,6 +28,10 @@ import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../../../common/guards/roles.guard';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../../../common/decorators/roles.decorator';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { UserService } from '../../../application/user.service';
 import { UserRole } from '../../../domain/enums/user-role.enum';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -83,12 +87,9 @@ export class UserController {
   async findAll(
     @CurrentUser() currentUser: JwtPayload,
   ): Promise<UserResponseDto[]> {
-    const companyId =
-      currentUser.role === UserRole.SUPER_ADMIN
-        ? undefined
-        : (currentUser.companyId ?? undefined);
-
-    const users = await this.userService.findAll(companyId);
+    const users = await this.userService.findAll(
+      resolveCompanyScope(currentUser),
+    );
     return plainToInstance(UserResponseDto, users, {
       excludeExtraneousValues: true,
     });
@@ -101,9 +102,11 @@ export class UserController {
   @ApiOkResponse({ type: UserResponseDto })
   @ApiNotFoundResponse({ description: 'User not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<UserResponseDto> {
     const user = await this.userService.findById(id);
+    assertCompanyAccess(currentUser, user.companyId);
     return plainToInstance(UserResponseDto, user, {
       excludeExtraneousValues: true,
     });
