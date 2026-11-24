@@ -38,6 +38,21 @@ export class FuelLogResponseDto {
   gasStation: string | null;
 
   @ApiPropertyOptional({
+    example: 'Autopista Norte #150-20, Bogotá',
+    nullable: true,
+  })
+  @Expose()
+  gasStationAddress: string | null;
+
+  @ApiPropertyOptional({ example: 4.7369, nullable: true })
+  @Expose()
+  gasStationLatitude: number | null;
+
+  @ApiPropertyOptional({ example: -74.0446, nullable: true })
+  @Expose()
+  gasStationLongitude: number | null;
+
+  @ApiPropertyOptional({
     example: 'Tanqueo completo, tanque lleno',
     nullable: true,
   })

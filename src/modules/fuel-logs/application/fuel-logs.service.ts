@@ -39,6 +39,9 @@ export class FuelLogsService {
       gallons: dto.gallons,
       odometer: dto.odometer ?? null,
       gasStation: dto.gasStation ?? null,
+      gasStationAddress: dto.gasStationAddress ?? null,
+      gasStationLatitude: dto.gasStationLatitude ?? null,
+      gasStationLongitude: dto.gasStationLongitude ?? null,
       notes: dto.notes ?? null,
     });
 
@@ -84,6 +87,15 @@ export class FuelLogsService {
       ...(dto.gallons !== undefined && { gallons: dto.gallons }),
       ...(dto.odometer !== undefined && { odometer: dto.odometer }),
       ...(dto.gasStation !== undefined && { gasStation: dto.gasStation }),
+      ...(dto.gasStationAddress !== undefined && {
+        gasStationAddress: dto.gasStationAddress,
+      }),
+      ...(dto.gasStationLatitude !== undefined && {
+        gasStationLatitude: dto.gasStationLatitude,
+      }),
+      ...(dto.gasStationLongitude !== undefined && {
+        gasStationLongitude: dto.gasStationLongitude,
+      }),
       ...(dto.notes !== undefined && { notes: dto.notes }),
     });
     const vehicle = await this.vehiclesService.findById(updated.vehicleId);

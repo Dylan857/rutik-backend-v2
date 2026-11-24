@@ -124,7 +124,8 @@ export class DriverController {
   @ApiOperation({
     summary: 'Update a driver profile',
     description:
-      'Updates driver-specific fields only. Personal info is updated via PATCH /users/:userId.',
+      'Updates the driver profile and, when sent, the personal info ' +
+      '(firstName, lastName, document, email, phone) on the linked User account.',
   })
   @ApiOkResponse({ type: DriverResponseDto })
   @ApiNotFoundResponse({ description: 'Driver not found' })
@@ -132,7 +133,8 @@ export class DriverController {
     description: 'License expiration date is not a future date',
   })
   @ApiConflictResponse({
-    description: 'License number already in use within this company',
+    description:
+      'License number already in use within this company, or email/document already registered',
   })
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')

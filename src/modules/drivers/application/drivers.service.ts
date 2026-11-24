@@ -48,7 +48,7 @@ export class DriverService {
         document: dto.document,
         email: dto.email,
         password: dto.password,
-        phone: dto.phone,
+        phone: dto.phone ?? undefined,
       },
       actor,
     );
@@ -115,7 +115,34 @@ export class DriverService {
       this.assertLicenseNotExpired(dto.licenseExpirationDate);
     }
 
-    const updated = await this.driverRepository.update(id, dto);
+    const { firstName, lastName, document, email, phone, ...driverFields } =
+      dto;
+    // phone may be null (clear it) — UpdateUserDto types it as string, but
+    // the users.phone column is nullable and the repository writes null as-is.
+    const personalFields = {
+      firstName,
+      lastName,
+      document,
+      email,
+      phone: phone as string | undefined,
+    };
+    const hasPersonalChanges = Object.values(personalFields).some(
+      (value) => value !== undefined,
+    );
+
+    // Personal info lives on the linked User — written there first so an
+    // email/document conflict aborts before the driver row is touched.
+    // Audited once below as a driver update, not again as a user update.
+    if (hasPersonalChanges) {
+      await this.userService.update(current.userId, personalFields, actor, {
+        audit: false,
+      });
+    }
+
+    const updated =
+      Object.keys(driverFields).length > 0
+        ? await this.driverRepository.update(id, driverFields)
+        : current;
     const user = await this.userService.findById(updated.userId);
 
     await this.auditLogsService.record({

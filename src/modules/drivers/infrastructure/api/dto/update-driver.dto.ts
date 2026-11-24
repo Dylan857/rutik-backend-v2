@@ -1,18 +1,10 @@
 import { OmitType, PartialType } from '@nestjs/swagger';
 import { CreateDriverDto } from './create-driver.dto';
 
-// companyId is immutable after creation.
-// Personal info (firstName, lastName, document, phone, email, password) lives on the
-// User entity and is updated via PATCH /users/:userId.
-// Only driver-specific operational fields are updatable here.
+// companyId is immutable after creation, and the password is changed through
+// the password-reset flow, not here. Personal info (firstName, lastName,
+// document, email, phone) is accepted and written through to the driver's
+// linked User account; the rest updates the driver profile itself.
 export class UpdateDriverDto extends PartialType(
-  OmitType(CreateDriverDto, [
-    'companyId',
-    'firstName',
-    'lastName',
-    'document',
-    'email',
-    'password',
-    'phone',
-  ] as const),
+  OmitType(CreateDriverDto, ['companyId', 'password'] as const),
 ) {}
