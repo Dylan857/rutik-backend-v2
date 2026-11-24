@@ -31,13 +31,13 @@ import {
 // filtered stop set as waypoints, so the limit applies per leg.
 const MAX_STOPS_FOR_DIRECTIONS = 23;
 
-interface LegDirectionsResult {
+export interface LegDirectionsResult {
   polyline: string;
   distanceMeters: number;
   durationSeconds: number;
 }
 
-interface LegComputation {
+export interface LegComputation {
   order: RouteStop[];
   directions: LegDirectionsResult | null;
 }
@@ -209,6 +209,50 @@ export class RouteStopsService {
     );
   }
 
+  /**
+   * Orders one day's route without the given absent students, WITHOUT
+   * touching the base route (no stop_order writes, no directions cache
+   * writes) — used by DailyRoutePlansService to plan a single date.
+   * Exclusions are per leg: a student can miss only the pickup or only the
+   * dropoff.
+   */
+  async computeDailyLegs(
+    routeId: string,
+    excludedFromPickup: ReadonlySet<string>,
+    excludedFromDropoff: ReadonlySet<string>,
+  ): Promise<{
+    stops: RouteStop[];
+    pickup: LegComputation;
+    dropoff: LegComputation;
+  }> {
+    const stops = await this.routeStopRepository.findAll({
+      schoolRouteId: routeId,
+    });
+    const { pickupStops, dropoffStops } = this.splitLegs(stops);
+
+    const legs = await this.computeLegs(
+      routeId,
+      pickupStops.filter((s) => !excludedFromPickup.has(s.studentId)),
+      dropoffStops.filter((s) => !excludedFromDropoff.has(s.studentId)),
+    );
+    return { stops, ...legs };
+  }
+
+  /** Stops that ride each leg of the base route, per the student's tripType. */
+  splitLegs(stops: RouteStop[]): {
+    pickupStops: RouteStop[];
+    dropoffStops: RouteStop[];
+  } {
+    return {
+      pickupStops: stops.filter(
+        (s) => s.student.tripType !== TripType.DROPOFF_ONLY,
+      ),
+      dropoffStops: stops.filter(
+        (s) => s.student.tripType !== TripType.PICKUP_ONLY,
+      ),
+    };
+  }
+
   // ── Private algorithm ────────────────────────────────────────────────────────
 
   // Splits stops into a pickup leg (company -> school) and a dropoff leg
@@ -220,62 +264,11 @@ export class RouteStopsService {
     routeId: string,
     stops: RouteStop[],
   ): Promise<{ pickupOrder: RouteStop[]; dropoffOrder: RouteStop[] }> {
-    const pickupStops = stops.filter(
-      (s) => s.student.tripType !== TripType.DROPOFF_ONLY,
-    );
-    const dropoffStops = stops.filter(
-      (s) => s.student.tripType !== TripType.PICKUP_ONLY,
-    );
-
-    const apiKey = this.configService.get<string>('googleMaps.apiKey');
-
-    const route = await this.schoolRoutesService.findById(routeId);
-    const assignment = await this.assignmentsService.findById(
-      route.schoolAssignmentId,
-    );
-    const school = await this.schoolService.findById(assignment.schoolId);
-    const company = await this.companyService.findById(route.companyId);
-
-    const hasCoords =
-      school.latitude != null &&
-      school.longitude != null &&
-      company.latitude != null &&
-      company.longitude != null;
-
-    if (!hasCoords) {
-      this.logger.warn(
-        `Route ${routeId}: school or company has no coordinates — using nearest-neighbor fallback for both legs`,
-      );
-      return {
-        pickupOrder: this.nearestNeighborSort(pickupStops),
-        dropoffOrder: this.nearestNeighborSort(dropoffStops),
-      };
-    }
-
-    const companyPoint: LatLng = {
-      lat: company.latitude!,
-      lng: company.longitude!,
-    };
-    const schoolPoint: LatLng = {
-      lat: school.latitude!,
-      lng: school.longitude!,
-    };
-
-    const pickup = await this.computeLegOrder(
+    const { pickupStops, dropoffStops } = this.splitLegs(stops);
+    const { pickup, dropoff } = await this.computeLegs(
       routeId,
       pickupStops,
-      companyPoint,
-      schoolPoint,
-      apiKey,
-      'pickup',
-    );
-    const dropoff = await this.computeLegOrder(
-      routeId,
       dropoffStops,
-      schoolPoint,
-      companyPoint,
-      apiKey,
-      'dropoff',
     );
 
     const directionsCache: Parameters<
@@ -305,6 +298,74 @@ export class RouteStopsService {
     }
 
     return { pickupOrder: pickup.order, dropoffOrder: dropoff.order };
+  }
+
+  // Orders both legs (company -> school pickup, school -> company dropoff)
+  // for the given stop sets. Pure computation — callers decide whether to
+  // persist the result.
+  private async computeLegs(
+    routeId: string,
+    pickupStops: RouteStop[],
+    dropoffStops: RouteStop[],
+  ): Promise<{ pickup: LegComputation; dropoff: LegComputation }> {
+    const apiKey = this.configService.get<string>('googleMaps.apiKey');
+
+    const route = await this.schoolRoutesService.findById(routeId);
+    const assignment = await this.assignmentsService.findById(
+      route.schoolAssignmentId,
+    );
+    const school = await this.schoolService.findById(assignment.schoolId);
+    const company = await this.companyService.findById(route.companyId);
+
+    const hasCoords =
+      school.latitude != null &&
+      school.longitude != null &&
+      company.latitude != null &&
+      company.longitude != null;
+
+    if (!hasCoords) {
+      this.logger.warn(
+        `Route ${routeId}: school or company has no coordinates — using nearest-neighbor fallback for both legs`,
+      );
+      return {
+        pickup: {
+          order: this.nearestNeighborSort(pickupStops),
+          directions: null,
+        },
+        dropoff: {
+          order: this.nearestNeighborSort(dropoffStops),
+          directions: null,
+        },
+      };
+    }
+
+    const companyPoint: LatLng = {
+      lat: company.latitude!,
+      lng: company.longitude!,
+    };
+    const schoolPoint: LatLng = {
+      lat: school.latitude!,
+      lng: school.longitude!,
+    };
+
+    const pickup = await this.computeLegOrder(
+      routeId,
+      pickupStops,
+      companyPoint,
+      schoolPoint,
+      apiKey,
+      'pickup',
+    );
+    const dropoff = await this.computeLegOrder(
+      routeId,
+      dropoffStops,
+      schoolPoint,
+      companyPoint,
+      apiKey,
+      'dropoff',
+    );
+
+    return { pickup, dropoff };
   }
 
   // Orders a single leg's stops via Google Directions' optimizeWaypoints,
