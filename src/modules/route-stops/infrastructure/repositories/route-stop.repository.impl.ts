@@ -22,6 +22,7 @@ export class RouteStopRepositoryImpl implements IRouteStopRepository {
 
   async findAll(filters: RouteStopFilters): Promise<RouteStop[]> {
     const where: Record<string, unknown> = {};
+    if (filters.companyId) where.schoolRoute = { companyId: filters.companyId };
     if (filters.schoolRouteId) where.schoolRouteId = filters.schoolRouteId;
     if (filters.studentId) where.studentId = filters.studentId;
     return this.repository.find({
@@ -32,7 +33,10 @@ export class RouteStopRepositoryImpl implements IRouteStopRepository {
   }
 
   async findById(id: string): Promise<RouteStop | null> {
-    return this.repository.findOne({ where: { id } });
+    return this.repository.findOne({
+      where: { id },
+      relations: { schoolRoute: true },
+    });
   }
 
   async findByStudentId(studentId: string): Promise<RouteStop | null> {

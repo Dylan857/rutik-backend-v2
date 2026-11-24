@@ -9,17 +9,28 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiConflictResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
+import { assertCompanyAccess } from '../../../../../common/utils/company-scope';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { CompanyService } from '../../../application/company.service';
 import { CreateCompanyDto } from '../dto/create-company.dto';
 import { UpdateCompanyDto } from '../dto/update-company.dto';
@@ -28,6 +39,11 @@ import { CompanyWithAdminResponseDto } from '../dto/company-with-admin-response.
 import { UserResponseDto } from '../../../../user/infrastructure/api/dto/user-response.dto';
 
 @ApiTags('Companies')
+@ApiBearerAuth('access-token')
+@ApiUnauthorizedResponse({ description: 'Unauthorized' })
+@ApiForbiddenResponse({ description: 'Insufficient role' })
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.SUPER_ADMIN)
 @Controller('companies')
 export class CompanyController {
   constructor(private readonly companyService: CompanyService) {}
@@ -69,12 +85,18 @@ export class CompanyController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a company by ID' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'Get a company by ID',
+    description: 'ADMIN can only read its own company.',
+  })
   @ApiOkResponse({ type: CompanyResponseDto })
   @ApiNotFoundResponse({ description: 'Company not found' })
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<CompanyResponseDto> {
+    assertCompanyAccess(currentUser, id);
     const company = await this.companyService.findById(id);
     return plainToInstance(CompanyResponseDto, company, {
       excludeExtraneousValues: true,

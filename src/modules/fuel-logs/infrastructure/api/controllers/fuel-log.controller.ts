@@ -25,6 +25,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -70,6 +74,8 @@ export class FuelLogController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List fuel logs with optional filters' })
   @ApiOkResponse({ type: [FuelLogResponseDto] })
   @ApiQuery({
@@ -93,13 +99,14 @@ export class FuelLogController {
     description: 'Inclusive end of date range (YYYY-MM-DD)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('vehicleId') vehicleId?: string,
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
   ): Promise<FuelLogResponseDto[]> {
     const fuelLogs = await this.fuelLogsService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       vehicleId,
       dateFrom,
       dateTo,
@@ -110,13 +117,17 @@ export class FuelLogController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a fuel log by ID' })
   @ApiOkResponse({ type: FuelLogResponseDto })
   @ApiNotFoundResponse({ description: 'Fuel log not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<FuelLogResponseDto> {
     const fuelLog = await this.fuelLogsService.findById(id);
+    assertCompanyAccess(currentUser, fuelLog.companyId);
     return plainToInstance(FuelLogResponseDto, fuelLog, {
       excludeExtraneousValues: true,
     });

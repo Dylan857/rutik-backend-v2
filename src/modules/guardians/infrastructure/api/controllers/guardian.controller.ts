@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -67,6 +71,8 @@ export class GuardianController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List guardians with optional filters' })
   @ApiOkResponse({ type: [GuardianResponseDto] })
   @ApiQuery({
@@ -91,13 +97,14 @@ export class GuardianController {
     description: 'Filter by email (exact match)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('status') status?: GuardianStatus,
     @Query('document') document?: string,
     @Query('email') email?: string,
   ): Promise<GuardianResponseDto[]> {
     const guardians = await this.guardianService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       status,
       document,
       email,
@@ -108,13 +115,17 @@ export class GuardianController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a guardian by ID' })
   @ApiOkResponse({ type: GuardianResponseDto })
   @ApiNotFoundResponse({ description: 'Guardian not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<GuardianResponseDto> {
     const guardian = await this.guardianService.findById(id);
+    assertCompanyAccess(currentUser, guardian.companyId);
     return plainToInstance(GuardianResponseDto, guardian, {
       excludeExtraneousValues: true,
     });
