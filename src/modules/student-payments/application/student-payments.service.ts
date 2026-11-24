@@ -23,6 +23,8 @@ import { AuditLogsService } from '../../audit-logs/application/audit-logs.servic
 import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
 import { AuditEntityType } from '../../audit-logs/domain/enums/audit-entity-type.enum';
 import { AuditActor } from '../../audit-logs/domain/interfaces/audit-actor.interface';
+import { PushNotificationsService } from '../../push-notifications/application/push-notifications.service';
+import { UserRole } from '../../user/domain/enums/user-role.enum';
 import { StudentPayment } from '../domain/student-payment.entity';
 import { PaymentStatus } from '../domain/enums/payment-status.enum';
 import { PaymentMethod } from '../domain/enums/payment-method.enum';
@@ -45,6 +47,11 @@ import {
 } from './due-date.util';
 
 const MS_PER_DAY = 86_400_000;
+
+const MONTH_NAMES_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
 
 interface ComputedFields {
   status: PaymentStatus;
@@ -99,10 +106,12 @@ export class StudentPaymentsService {
     private readonly companyService: CompanyService,
     @Inject(forwardRef(() => StudentService))
     private readonly studentService: StudentService,
+    @Inject(forwardRef(() => StudentGuardianService))
     private readonly studentGuardianService: StudentGuardianService,
     private readonly paymentAccountsService: PaymentAccountsService,
     private readonly cloudinaryService: CloudinaryService,
     private readonly notificationsService: NotificationsService,
+    private readonly pushNotificationsService: PushNotificationsService,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
@@ -170,6 +179,8 @@ export class StudentPaymentsService {
       description: `Se registró un pago de ${amountPaid} para ${student.firstName} ${student.lastName}`,
     });
 
+    await this.notifyPaymentChange(created, computed);
+
     return this.attachComputed(created, computed);
   }
 
@@ -178,11 +189,33 @@ export class StudentPaymentsService {
     return payments.map((p) => this.attachComputed(p, this.recompute(p)));
   }
 
-  async findById(id: string): Promise<StudentPayment> {
+  /**
+   * `requester` is only passed by the controller's public GET — internal
+   * callers within this service (submitReceipt, softDelete, ...) omit it and
+   * skip the ownership check, since they already resolved/authorized the
+   * payment through their own path.
+   */
+  async findById(
+    id: string,
+    requester?: { userId: string; role: UserRole },
+  ): Promise<StudentPayment> {
     const payment = await this.paymentRepository.findById(id);
     if (!payment) {
       throw new NotFoundException(`Student payment with ID "${id}" not found`);
     }
+
+    if (requester?.role === UserRole.GUARDIAN) {
+      const isOwner = await this.studentGuardianService.isGuardianOfStudent(
+        requester.userId,
+        payment.studentId,
+      );
+      if (!isOwner) {
+        throw new ForbiddenException(
+          'You are not a guardian of the student this payment belongs to',
+        );
+      }
+    }
+
     return this.attachComputed(payment, this.recompute(payment));
   }
 
@@ -244,7 +277,63 @@ export class StudentPaymentsService {
       description: `Se actualizó el pago de ${updatedStudent.firstName} ${updatedStudent.lastName}`,
     });
 
+    await this.notifyPaymentChange(updated, computed, {
+      amountPaid: current.amountPaid,
+      // `current.status` is the stored column, which can lag behind the
+      // "as of now" status (e.g. PENDING stored but OVERDUE today) — compare
+      // against the recomputed one so a stale column doesn't fake a change.
+      status: this.recompute(current).status,
+    });
+
     return this.attachComputed(updated, computed);
+  }
+
+  /**
+   * Tells the guardians when an admin's manual edit/registration changes a
+   * payment's paid amount or status. Skipped when nothing money-related
+   * changed (notes/method edits) and while a receipt is under review
+   * (approve/reject send their own push). With no `previous` (create), only
+   * fires when the payment was born with something already paid.
+   */
+  private async notifyPaymentChange(
+    payment: StudentPayment,
+    computed: ComputedFields,
+    previous?: { amountPaid: number; status: PaymentStatus },
+  ): Promise<void> {
+    if (computed.status === PaymentStatus.IN_REVIEW) return;
+
+    if (previous) {
+      const unchanged =
+        previous.amountPaid === payment.amountPaid &&
+        previous.status === computed.status;
+      if (unchanged) return;
+    } else if (payment.amountPaid <= 0) {
+      return;
+    }
+
+    const period = `${MONTH_NAMES_ES[payment.billingMonth - 1]} ${payment.billingYear}`;
+
+    let title: string;
+    let body: string;
+    if (computed.status === PaymentStatus.PAID) {
+      title = 'Pago registrado';
+      body = `Tu pago de ${period} fue registrado. ¡Gracias!`;
+    } else if (computed.status === PaymentStatus.PARTIAL) {
+      title = 'Abono registrado';
+      body = `Registramos un abono a tu pago de ${period}. Saldo pendiente: $${computed.outstandingBalance.toLocaleString('es-CO')}.`;
+    } else {
+      title = 'Pago actualizado';
+      body = `Se actualizó el estado de tu pago de ${period}. Revísalo en la app.`;
+    }
+
+    await this.pushNotificationsService.notifyGuardiansOfStudent(
+      payment.studentId,
+      {
+        title,
+        body,
+        data: { type: 'payment_update', paymentId: payment.id },
+      },
+    );
   }
 
   async softDelete(id: string, actor: AuditActor): Promise<void> {
@@ -571,6 +660,7 @@ export class StudentPaymentsService {
 
     let created = 0;
     let skipped = 0;
+    const createdPayments: { id: string; studentId: string; billingMonth: number; billingYear: number; monthlyFee: number }[] = [];
 
     for (const student of activeStudents) {
       if (alreadyBilled.has(student.id)) {
@@ -610,7 +700,7 @@ export class StudentPaymentsService {
         submittedAt: null,
       });
 
-      await this.paymentRepository.create({
+      const createdPayment = await this.paymentRepository.create({
         companyId,
         studentId: student.id,
         billingMonth,
@@ -624,8 +714,28 @@ export class StudentPaymentsService {
         notes: null,
       });
 
+      createdPayments.push({
+        id: createdPayment.id,
+        studentId: student.id,
+        billingMonth,
+        billingYear,
+        monthlyFee: student.monthlyFee,
+      });
       created++;
     }
+
+    // Fired after the loop, all in parallel — a bulk run can touch hundreds
+    // of students, and one guardian's push failing must never affect another
+    // student's or slow down the whole billing cycle.
+    await Promise.allSettled(
+      createdPayments.map((payment) =>
+        this.pushNotificationsService.notifyGuardiansOfStudent(payment.studentId, {
+          title: 'Nueva factura disponible',
+          body: `Se generó tu factura de ${MONTH_NAMES_ES[payment.billingMonth - 1]} ${payment.billingYear} por $${payment.monthlyFee}.`,
+          data: { type: 'payment_update', paymentId: payment.id },
+        }),
+      ),
+    );
 
     return { created, skipped };
   }
@@ -786,6 +896,12 @@ export class StudentPaymentsService {
       sourceId: updated.id,
     });
 
+    await this.pushNotificationsService.notifyUser(actor.userId, {
+      title: 'Comprobante enviado',
+      body: `Tu comprobante de ${MONTH_NAMES_ES[updated.billingMonth - 1]} ${updated.billingYear} fue enviado y está en revisión.`,
+      data: { type: 'payment_update', paymentId: updated.id },
+    });
+
     await this.auditLogsService.record({
       companyId: updated.companyId,
       actorUserId: actor.userId,
@@ -852,6 +968,12 @@ export class StudentPaymentsService {
       description: `Se aprobó el comprobante de pago de ${student.firstName} ${student.lastName}`,
     });
 
+    await this.pushNotificationsService.notifyGuardiansOfStudent(updated.studentId, {
+      title: 'Pago aprobado',
+      body: `Tu pago de ${MONTH_NAMES_ES[updated.billingMonth - 1]} ${updated.billingYear} fue aprobado. ¡Gracias!`,
+      data: { type: 'payment_update', paymentId: updated.id },
+    });
+
     return this.attachComputed(updated, computed);
   }
 
@@ -897,6 +1019,12 @@ export class StudentPaymentsService {
       entityType: AuditEntityType.STUDENT_PAYMENT,
       entityId: updated.id,
       description: `Se rechazó el comprobante de pago de ${student.firstName} ${student.lastName}: ${dto.reason}`,
+    });
+
+    await this.pushNotificationsService.notifyGuardiansOfStudent(updated.studentId, {
+      title: 'Pago rechazado',
+      body: dto.reason,
+      data: { type: 'payment_update', paymentId: updated.id },
     });
 
     return this.attachComputed(updated, computed);

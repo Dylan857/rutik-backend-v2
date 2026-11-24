@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StudentsModule } from '../students/students.module';
 import { GuardiansModule } from '../guardians/guardians.module';
@@ -14,7 +14,7 @@ import { StudentGuardianController } from './infrastructure/api/controllers/stud
 @Module({
   imports: [
     TypeOrmModule.forFeature([StudentGuardian]),
-    StudentsModule,
+    forwardRef(() => StudentsModule),
     GuardiansModule,
     SchoolSchedulesModule,
     SchoolAssignmentsModule,

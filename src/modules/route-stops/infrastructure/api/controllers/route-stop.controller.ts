@@ -1,11 +1,20 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { RouteStopsService } from '../../../application/route-stops.service';
 import { RouteStopResponseDto } from '../dto/route-stop-response.dto';
 
@@ -15,6 +24,8 @@ export class RouteStopController {
   constructor(private readonly routeStopsService: RouteStopsService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List route stops with optional filters' })
   @ApiOkResponse({ type: [RouteStopResponseDto] })
   @ApiQuery({
@@ -41,6 +52,8 @@ export class RouteStopController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a route stop by ID' })
   @ApiOkResponse({ type: RouteStopResponseDto })
   async findById(

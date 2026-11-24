@@ -267,8 +267,12 @@ export class StudentPaymentController {
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() currentUser: JwtPayload,
   ): Promise<StudentPaymentResponseDto> {
-    const payment = await this.paymentsService.findById(id);
+    const payment = await this.paymentsService.findById(id, {
+      userId: currentUser.sub,
+      role: currentUser.role,
+    });
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
