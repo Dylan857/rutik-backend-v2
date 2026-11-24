@@ -24,6 +24,8 @@ import { PasswordResetModule } from './modules/password-reset/password-reset.mod
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { FuelLogsModule } from './modules/fuel-logs/fuel-logs.module';
 import { MaintenancesModule } from './modules/maintenances/maintenances.module';
+import { StudentAbsencesModule } from './modules/student-absences/student-absences.module';
+import { GuardianMessagesModule } from './modules/guardian-messages/guardian-messages.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
@@ -69,6 +71,8 @@ import cloudinaryConfig from './shared/config/cloudinary.config';
     NotificationsModule,
     FuelLogsModule,
     MaintenancesModule,
+    StudentAbsencesModule,
+    GuardianMessagesModule,
   ],
 })
 export class AppModule {}

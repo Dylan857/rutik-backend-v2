@@ -140,6 +140,7 @@ export class StudentGuardianController {
       lastName: entry.student.lastName,
       grade: entry.student.grade,
       status: entry.student.status,
+      tripType: entry.student.tripType,
       scheduleName: entry.scheduleName,
       pickupTime: entry.pickupTime,
       driverFirstName: entry.driverFirstName,

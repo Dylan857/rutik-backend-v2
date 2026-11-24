@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { StudentStatus } from '../../../../students/domain/enums/student-status.enum';
+import { TripType } from '../../../../students/domain/enums/trip-type.enum';
 
 export class MyStudentResponseDto {
   @ApiProperty({ example: 'c3d4e5f6-a7b8-9012-cdef-345678901234' })
@@ -35,6 +36,14 @@ export class MyStudentResponseDto {
   @ApiProperty({ enum: StudentStatus, example: StudentStatus.ACTIVE })
   @Expose()
   status: StudentStatus;
+
+  @ApiProperty({
+    enum: TripType,
+    example: TripType.ROUND_TRIP,
+    description: 'Which route legs the student rides (ida, regreso or both)',
+  })
+  @Expose()
+  tripType: TripType;
 
   @ApiProperty({ example: 'Ruta Mañana' })
   @Expose()
