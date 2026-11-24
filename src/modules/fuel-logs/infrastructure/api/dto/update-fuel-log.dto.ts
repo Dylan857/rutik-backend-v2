@@ -11,6 +11,9 @@ export class UpdateFuelLogDto extends PartialType(
     'gallons',
     'odometer',
     'gasStation',
+    'gasStationAddress',
+    'gasStationLatitude',
+    'gasStationLongitude',
     'notes',
   ] as const),
 ) {}

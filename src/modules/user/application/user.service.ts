@@ -92,6 +92,9 @@ export class UserService {
     id: string,
     dto: UpdateUserDto,
     actor?: AuditActor,
+    // Callers that update a user as part of a larger entity (e.g. a driver's
+    // personal info) record their own audit entry and skip this one.
+    options: { audit?: boolean } = {},
   ): Promise<User> {
     const current = await this.findById(id);
 
@@ -114,6 +117,8 @@ export class UserService {
     }
 
     const updated = await this.userRepository.update(id, dto);
+
+    if (options.audit === false) return updated;
 
     await this.auditLogsService.record({
       companyId: updated.companyId,

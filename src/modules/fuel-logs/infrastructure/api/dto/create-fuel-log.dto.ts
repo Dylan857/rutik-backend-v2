@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsInt,
+  IsLatitude,
+  IsLongitude,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -56,6 +58,25 @@ export class CreateFuelLogDto {
   @MaxLength(150)
   @IsOptional()
   gasStation?: string;
+
+  @ApiPropertyOptional({
+    example: 'Autopista Norte #150-20, Bogotá',
+    description: 'Station address, picked from the map',
+  })
+  @IsString()
+  @MaxLength(500)
+  @IsOptional()
+  gasStationAddress?: string;
+
+  @ApiPropertyOptional({ example: 4.7369 })
+  @IsLatitude()
+  @IsOptional()
+  gasStationLatitude?: number;
+
+  @ApiPropertyOptional({ example: -74.0446 })
+  @IsLongitude()
+  @IsOptional()
+  gasStationLongitude?: number;
 
   @ApiPropertyOptional({ example: 'Tanqueo completo, tanque lleno' })
   @IsString()

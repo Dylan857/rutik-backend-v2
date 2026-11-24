@@ -70,12 +70,18 @@ export class CreateDriverDto {
   @MaxLength(255)
   password: string;
 
-  @ApiPropertyOptional({ example: '+57 310 555 6677' })
-  @Transform(({ value }: { value: string }) => value?.trim())
+  @ApiPropertyOptional({
+    example: '+57 310 555 6677',
+    description: 'Send null on update to clear it',
+  })
+  // null is preserved (not trimmed to undefined) so an update can clear it.
+  @Transform(({ value }: { value: string | null }) =>
+    value === null ? null : value?.trim(),
+  )
   @IsString()
   @IsOptional()
   @MaxLength(20)
-  phone?: string;
+  phone?: string | null;
 
   // ── Driver profile ────────────────────────────────────────────────────────
 

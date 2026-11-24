@@ -77,4 +77,48 @@ export class MailService {
       throw new Error(`Failed to send guardian welcome email: ${error.message}`);
     }
   }
+
+  /**
+   * Document-expiry alert for a company's admins (SOAT, tecnomecánica,
+   * driver license). Same content as the in-app notification it mirrors.
+   */
+  async sendExpiryAlert(
+    to: string[],
+    title: string,
+    message: string,
+    critical: boolean,
+  ): Promise<void> {
+    const accent = critical ? '#dc2626' : '#d97706';
+
+    const { error } = await this.resend.emails.send({
+      from: this.from,
+      to,
+      subject: `Rutik — ${title}`,
+      html: `
+        <div style="background-color: #f9fafb; padding: 32px 16px; font-family: 'Helvetica Neue', Arial, sans-serif;">
+          <div style="max-width: 480px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e5e7eb;">
+            <div style="background-color: #16a34a; padding: 24px 32px; text-align: center;">
+              <span style="color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 0.5px;">RUTIK</span>
+            </div>
+            <div style="padding: 32px;">
+              <div style="border-left: 4px solid ${accent}; padding-left: 12px; margin-bottom: 20px;">
+                <h1 style="margin: 0; font-size: 18px; color: #111827;">${title}</h1>
+              </div>
+              <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #4b5563;">
+                ${message}
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                Actualiza la fecha de vencimiento en Rutik una vez renueves el documento
+                para dejar de recibir este recordatorio.
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    });
+
+    if (error) {
+      throw new Error(`Failed to send expiry alert email: ${error.message}`);
+    }
+  }
 }

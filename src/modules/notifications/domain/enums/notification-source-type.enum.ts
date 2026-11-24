@@ -3,4 +3,5 @@ export enum NotificationSourceType {
   BILLING_CYCLE = 'BILLING_CYCLE',
   MAINTENANCE = 'MAINTENANCE',
   STUDENT_PAYMENT = 'STUDENT_PAYMENT',
+  DRIVER = 'DRIVER',
 }

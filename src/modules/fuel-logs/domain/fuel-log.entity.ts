@@ -62,6 +62,33 @@ export class FuelLog extends BaseEntity {
   })
   gasStation: string | null;
 
+  // Where the station is, picked from Google Places on the map — lets the
+  // company see which stations its vehicles actually use and where.
+  @Column({
+    name: 'gas_station_address',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+    default: null,
+  })
+  gasStationAddress: string | null;
+
+  @Column({
+    name: 'gas_station_latitude',
+    type: 'float',
+    nullable: true,
+    default: null,
+  })
+  gasStationLatitude: number | null;
+
+  @Column({
+    name: 'gas_station_longitude',
+    type: 'float',
+    nullable: true,
+    default: null,
+  })
+  gasStationLongitude: number | null;
+
   @Column({ type: 'text', nullable: true, default: null })
   notes: string | null;
 }

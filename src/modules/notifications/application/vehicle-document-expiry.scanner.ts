@@ -4,6 +4,8 @@ import { VehiclesService } from '../../vehicles/application/vehicles.service';
 import { Vehicle } from '../../vehicles/domain/vehicle.entity';
 import { VehicleStatus } from '../../vehicles/domain/enums/vehicle-status.enum';
 import { NotificationsService } from './notifications.service';
+import { ExpiryAlertMailer } from './expiry-alert-mailer';
+import { CreateNotificationInput } from '../domain/interfaces/create-notification.input';
 import { NotificationType } from '../domain/enums/notification-type.enum';
 import { NotificationSeverity } from '../domain/enums/notification-severity.enum';
 import { NotificationSourceType } from '../domain/enums/notification-source-type.enum';
@@ -32,6 +34,7 @@ export class VehicleDocumentExpiryScanner {
   constructor(
     private readonly vehiclesService: VehiclesService,
     private readonly notificationsService: NotificationsService,
+    private readonly expiryAlertMailer: ExpiryAlertMailer,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_6AM)
@@ -76,7 +79,7 @@ export class VehicleDocumentExpiryScanner {
   private async notifyMissingBimonthlyInspection(
     vehicle: Vehicle,
   ): Promise<void> {
-    await this.notificationsService.create({
+    await this.notifyAndEmail({
       companyId: vehicle.companyId,
       type: NotificationType.VEHICLE_DOCUMENT_EXPIRING,
       severity: NotificationSeverity.WARNING,
@@ -119,7 +122,7 @@ export class VehicleDocumentExpiryScanner {
         ? `El ${documentLabel}${numberSuffix} del vehículo ${vehicle.plate} venció hace ${Math.abs(diffDays)} día(s).`
         : `El ${documentLabel}${numberSuffix} del vehículo ${vehicle.plate} vence en ${diffDays} día(s).`;
 
-    await this.notificationsService.create({
+    await this.notifyAndEmail({
       companyId: vehicle.companyId,
       type: NotificationType.VEHICLE_DOCUMENT_EXPIRING,
       severity,
@@ -129,6 +132,23 @@ export class VehicleDocumentExpiryScanner {
       sourceId: vehicle.id,
       dedupeKey: `${NotificationType.VEHICLE_DOCUMENT_EXPIRING}:${vehicle.id}:${documentType}:${expirationDate}:${dedupeSuffix}`,
     });
+  }
+
+  /**
+   * Creates the in-app notification and, only when it's actually new (not
+   * deduped away), emails it to the company's admins — so a scan that runs
+   * twice in a day never sends the same email twice.
+   */
+  private async notifyAndEmail(input: CreateNotificationInput): Promise<void> {
+    const created = await this.notificationsService.create(input);
+    if (!created) return;
+
+    await this.expiryAlertMailer.notifyCompanyAdmins(
+      input.companyId,
+      input.title,
+      input.message,
+      input.severity === NotificationSeverity.CRITICAL,
+    );
   }
 
   private daysUntil(dateStr: string): number {
