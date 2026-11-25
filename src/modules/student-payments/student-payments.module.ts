@@ -6,6 +6,7 @@ import { StudentGuardiansModule } from '../student-guardians/student-guardians.m
 import { PaymentAccountsModule } from '../payment-accounts/payment-accounts.module';
 import { CloudinaryModule } from '../../shared/cloudinary/cloudinary.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { StudentPayment } from './domain/student-payment.entity';
 import { STUDENT_PAYMENT_REPOSITORY } from './domain/interfaces/student-payment.repository';
@@ -22,6 +23,7 @@ import { StudentPaymentController } from './infrastructure/api/controllers/stude
     PaymentAccountsModule,
     CloudinaryModule,
     NotificationsModule,
+    PushNotificationsModule,
     AuditLogsModule,
   ],
   controllers: [StudentPaymentController],

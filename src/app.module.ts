@@ -28,12 +28,15 @@ import { StudentAbsencesModule } from './modules/student-absences/student-absenc
 import { GuardianMessagesModule } from './modules/guardian-messages/guardian-messages.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { DriverAppModule } from './modules/driver-app/driver-app.module';
+import { DeviceTokensModule } from './modules/device-tokens/device-tokens.module';
+import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
 import googleMapsConfig from './shared/config/google-maps.config';
 import mailConfig from './shared/config/mail.config';
 import cloudinaryConfig from './shared/config/cloudinary.config';
+import firebaseConfig from './shared/config/firebase.config';
 
 @Module({
   imports: [
@@ -46,6 +49,7 @@ import cloudinaryConfig from './shared/config/cloudinary.config';
         googleMapsConfig,
         mailConfig,
         cloudinaryConfig,
+        firebaseConfig,
       ],
       envFilePath: '.env',
     }),
@@ -77,6 +81,8 @@ import cloudinaryConfig from './shared/config/cloudinary.config';
     GuardianMessagesModule,
     ProfileModule,
     DriverAppModule,
+    DeviceTokensModule,
+    PushNotificationsModule,
   ],
 })
 export class AppModule {}

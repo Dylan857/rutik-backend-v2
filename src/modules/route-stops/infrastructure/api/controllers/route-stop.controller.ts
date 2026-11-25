@@ -38,6 +38,8 @@ export class RouteStopController {
   constructor(private readonly routeStopsService: RouteStopsService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List route stops with optional filters' })
   @ApiOkResponse({ type: [RouteStopResponseDto] })
   @ApiQuery({
@@ -66,6 +68,8 @@ export class RouteStopController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a route stop by ID' })
   @ApiOkResponse({ type: RouteStopResponseDto })
   async findById(
