@@ -38,9 +38,16 @@ import { AssignmentStatus } from '../../../domain/enums/assignment-status.enum';
 import { CreateSchoolAssignmentDto } from '../dto/create-school-assignment.dto';
 import { UpdateSchoolAssignmentDto } from '../dto/update-school-assignment.dto';
 import { SchoolAssignmentResponseDto } from '../dto/school-assignment-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('School Assignments')
 @Controller('school-assignments')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class SchoolAssignmentController {
   constructor(private readonly assignmentsService: SchoolAssignmentsService) {}
 

@@ -85,10 +85,17 @@ export class CompanyController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.ADMIN,
+    UserRole.GUARDIAN,
+    UserRole.DRIVER,
+  )
   @ApiOperation({
     summary: 'Get a company by ID',
-    description: 'ADMIN can only read its own company.',
+    description:
+      'Everyone but SUPER_ADMIN can only read their own company (the mobile app ' +
+      'shows its contact info and WhatsApp link).',
   })
   @ApiOkResponse({ type: CompanyResponseDto })
   @ApiNotFoundResponse({ description: 'Company not found' })

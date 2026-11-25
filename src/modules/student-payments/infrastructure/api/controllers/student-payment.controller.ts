@@ -54,6 +54,10 @@ import { PaymentsSummaryResponseDto } from '../dto/payments-summary-response.dto
 
 @ApiTags('Student Payments')
 @Controller('student-payments')
+// Admin by default; the parents' app gets explicit per-method access below
+// (its own children's payments only).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class StudentPaymentController {
   constructor(private readonly paymentsService: StudentPaymentsService) {}
 
@@ -127,9 +131,12 @@ export class StudentPaymentController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'List payment records with optional filters' })
+  @ApiOperation({
+    summary: 'List payment records with optional filters',
+    description: 'A GUARDIAN must send studentId, and only for one of their children.',
+  })
   @ApiOkResponse({ type: [StudentPaymentResponseDto] })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiQuery({
@@ -166,6 +173,13 @@ export class StudentPaymentController {
     @Query('billingYear') billingYear?: string,
     @Query('status') status?: PaymentStatus,
   ): Promise<StudentPaymentResponseDto[]> {
+    if (currentUser.role === UserRole.GUARDIAN) {
+      if (!studentId) {
+        throw new BadRequestException('studentId is required');
+      }
+      await this.paymentsService.assertGuardianOf(currentUser.sub, studentId);
+    }
+
     const payments = await this.paymentsService.findAll({
       companyId: resolveCompanyScope(currentUser, companyId),
       studentId,
@@ -264,7 +278,7 @@ export class StudentPaymentController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a payment record by ID' })
   @ApiOkResponse({ type: StudentPaymentResponseDto })
@@ -276,6 +290,9 @@ export class StudentPaymentController {
   ): Promise<StudentPaymentResponseDto> {
     const payment = await this.paymentsService.findById(id);
     assertCompanyAccess(currentUser, payment.companyId);
+    if (currentUser.role === UserRole.GUARDIAN) {
+      await this.paymentsService.assertGuardianOf(currentUser.sub, payment.studentId);
+    }
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -283,7 +300,7 @@ export class StudentPaymentController {
 
   @Post(':id/receipts')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.GUARDIAN)
   @UseInterceptors(FileInterceptor('file'))
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')

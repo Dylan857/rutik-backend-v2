@@ -38,9 +38,16 @@ import { GuardianStatus } from '../../../domain/enums/guardian-status.enum';
 import { CreateGuardianDto } from '../dto/create-guardian.dto';
 import { UpdateGuardianDto } from '../dto/update-guardian.dto';
 import { GuardianResponseDto } from '../dto/guardian-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Guardians')
 @Controller('guardians')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class GuardianController {
   constructor(private readonly guardianService: GuardianService) {}
 

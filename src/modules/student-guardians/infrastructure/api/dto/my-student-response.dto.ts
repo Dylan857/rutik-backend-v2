@@ -52,7 +52,8 @@ export class MyStudentResponseDto {
   @ApiPropertyOptional({
     example: '06:35:00',
     nullable: true,
-    description: 'Schedule start time. Null if there is no active driver/vehicle assignment yet.',
+    description:
+      'Schedule start time. Null if there is no active driver/vehicle assignment yet.',
   })
   @Expose()
   pickupTime: string | null;
@@ -64,4 +65,42 @@ export class MyStudentResponseDto {
   @ApiPropertyOptional({ example: 'Martínez', nullable: true })
   @Expose()
   driverLastName: string | null;
+
+  @ApiPropertyOptional({
+    example: '13:00:00',
+    nullable: true,
+    description:
+      'Schedule end time (regreso). Null if there is no active assignment yet.',
+  })
+  @Expose()
+  dropoffTime: string | null;
+
+  @ApiPropertyOptional({ example: '3105556677', nullable: true })
+  @Expose()
+  driverPhone: string | null;
+
+  @ApiPropertyOptional({ example: 'ABC123', nullable: true })
+  @Expose()
+  vehiclePlate: string | null;
+
+  @ApiPropertyOptional({ example: 'Chevrolet NPR Blanco', nullable: true })
+  @Expose()
+  vehicleDescription: string | null;
+
+  @ApiPropertyOptional({
+    example: 3,
+    nullable: true,
+    description: "Stop number on the base route's pickup leg (ida), if routed",
+  })
+  @Expose()
+  stopOrder: number | null;
+
+  @ApiPropertyOptional({
+    example: 2,
+    nullable: true,
+    description:
+      "Stop number on the base route's dropoff leg (regreso), if routed",
+  })
+  @Expose()
+  stopOrderReturn: number | null;
 }

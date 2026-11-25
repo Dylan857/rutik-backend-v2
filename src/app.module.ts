@@ -26,6 +26,8 @@ import { FuelLogsModule } from './modules/fuel-logs/fuel-logs.module';
 import { MaintenancesModule } from './modules/maintenances/maintenances.module';
 import { StudentAbsencesModule } from './modules/student-absences/student-absences.module';
 import { GuardianMessagesModule } from './modules/guardian-messages/guardian-messages.module';
+import { ProfileModule } from './modules/profile/profile.module';
+import { DriverAppModule } from './modules/driver-app/driver-app.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
@@ -73,6 +75,8 @@ import cloudinaryConfig from './shared/config/cloudinary.config';
     MaintenancesModule,
     StudentAbsencesModule,
     GuardianMessagesModule,
+    ProfileModule,
+    DriverAppModule,
   ],
 })
 export class AppModule {}

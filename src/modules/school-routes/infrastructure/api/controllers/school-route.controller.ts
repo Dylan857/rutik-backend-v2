@@ -33,9 +33,16 @@ import { SchoolRoutesService } from '../../../application/school-routes.service'
 import { RouteStatus } from '../../../domain/enums/route-status.enum';
 import { UpdateSchoolRouteDto } from '../dto/update-school-route.dto';
 import { SchoolRouteResponseDto } from '../dto/school-route-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('School Routes')
 @Controller('school-routes')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class SchoolRouteController {
   constructor(private readonly schoolRoutesService: SchoolRoutesService) {}
 

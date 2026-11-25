@@ -38,9 +38,16 @@ import { CreateMaintenanceDto } from '../dto/create-maintenance.dto';
 import { UpdateMaintenanceDto } from '../dto/update-maintenance.dto';
 import { MaintenanceResponseDto } from '../dto/maintenance-response.dto';
 import { MaintenanceSummaryResponseDto } from '../dto/maintenance-summary-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Maintenances')
 @Controller('maintenances')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class MaintenanceController {
   constructor(private readonly maintenancesService: MaintenancesService) {}
 

@@ -36,9 +36,16 @@ import { FuelLogsService } from '../../../application/fuel-logs.service';
 import { CreateFuelLogDto } from '../dto/create-fuel-log.dto';
 import { UpdateFuelLogDto } from '../dto/update-fuel-log.dto';
 import { FuelLogResponseDto } from '../dto/fuel-log-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Fuel Logs')
 @Controller('fuel-logs')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class FuelLogController {
   constructor(private readonly fuelLogsService: FuelLogsService) {}
 

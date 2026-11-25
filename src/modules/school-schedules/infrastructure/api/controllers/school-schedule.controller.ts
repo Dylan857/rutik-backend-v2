@@ -37,9 +37,16 @@ import { SchoolScheduleService } from '../../../application/school-schedules.ser
 import { CreateSchoolScheduleDto } from '../dto/create-school-schedule.dto';
 import { UpdateSchoolScheduleDto } from '../dto/update-school-schedule.dto';
 import { SchoolScheduleResponseDto } from '../dto/school-schedule-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('School Schedules')
 @Controller('school-schedules')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class SchoolScheduleController {
   constructor(private readonly scheduleService: SchoolScheduleService) {}
 

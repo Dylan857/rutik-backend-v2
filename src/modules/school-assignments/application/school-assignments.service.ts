@@ -31,8 +31,19 @@ export type AssignmentSummary = Omit<
   'school' | 'driver' | 'vehicle'
 > & {
   school?: { id: string; name: string };
-  driver?: { id: string; firstName: string; lastName: string };
-  vehicle?: { id: string; plate: string };
+  driver?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone: string | null;
+  };
+  vehicle?: {
+    id: string;
+    plate: string;
+    brand: string;
+    model: string;
+    color: string;
+  };
 };
 
 @Injectable()
@@ -230,10 +241,17 @@ export class SchoolAssignmentsService {
             id: assignment.driver.id,
             firstName: assignment.driver.user?.firstName ?? '',
             lastName: assignment.driver.user?.lastName ?? '',
+            phone: assignment.driver.user?.phone ?? null,
           }
         : undefined,
       vehicle: assignment.vehicle
-        ? { id: assignment.vehicle.id, plate: assignment.vehicle.plate }
+        ? {
+            id: assignment.vehicle.id,
+            plate: assignment.vehicle.plate,
+            brand: assignment.vehicle.brand,
+            model: assignment.vehicle.model,
+            color: assignment.vehicle.color,
+          }
         : undefined,
     };
   }

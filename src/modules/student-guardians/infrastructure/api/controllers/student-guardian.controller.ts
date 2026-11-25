@@ -39,9 +39,16 @@ import { CreateStudentGuardianDto } from '../dto/create-student-guardian.dto';
 import { UpdateStudentGuardianDto } from '../dto/update-student-guardian.dto';
 import { StudentGuardianResponseDto } from '../dto/student-guardian-response.dto';
 import { MyStudentResponseDto } from '../dto/my-student-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Student Guardians')
 @Controller('student-guardians')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class StudentGuardianController {
   constructor(
     private readonly studentGuardianService: StudentGuardianService,
@@ -126,7 +133,7 @@ export class StudentGuardianController {
 
   // Must be declared before :id to avoid "me" being parsed as a UUID
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List the students linked to the currently authenticated guardian',
@@ -151,8 +158,14 @@ export class StudentGuardianController {
       tripType: entry.student.tripType,
       scheduleName: entry.scheduleName,
       pickupTime: entry.pickupTime,
+      dropoffTime: entry.dropoffTime,
       driverFirstName: entry.driverFirstName,
       driverLastName: entry.driverLastName,
+      driverPhone: entry.driverPhone,
+      vehiclePlate: entry.vehiclePlate,
+      vehicleDescription: entry.vehicleDescription,
+      stopOrder: entry.stopOrder,
+      stopOrderReturn: entry.stopOrderReturn,
     }));
     return plainToInstance(MyStudentResponseDto, flattened, {
       excludeExtraneousValues: true,

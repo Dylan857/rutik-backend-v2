@@ -45,6 +45,10 @@ import { GenerateDriverPaymentCycleResponseDto } from '../dto/payment-cycle-resp
 
 @ApiTags('Driver Payments')
 @Controller('driver-payments')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class DriverPaymentController {
   constructor(private readonly paymentsService: DriverPaymentsService) {}
 

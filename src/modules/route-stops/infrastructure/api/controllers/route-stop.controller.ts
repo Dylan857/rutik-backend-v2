@@ -16,6 +16,9 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
 import {
   assertCompanyAccess,
@@ -26,7 +29,10 @@ import { RouteStopResponseDto } from '../dto/route-stop-response.dto';
 
 @ApiTags('Route Stops')
 @ApiBearerAuth('access-token')
-@UseGuards(JwtAuthGuard)
+// Admin panel only — the parents' app gets its stop order from
+// GET /student-guardians/me; drivers from GET /driver/routes/:id/daily.
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 @Controller('route-stops')
 export class RouteStopController {
   constructor(private readonly routeStopsService: RouteStopsService) {}
