@@ -43,6 +43,6 @@ import { StudentAbsence } from '../student-absences/domain/student-absence.entit
       useClass: RouteStopRepositoryImpl,
     },
   ],
-  exports: [RouteStopsService, DailyRoutePlansService],
+  exports: [RouteStopsService, DailyRoutePlansService, GoogleDirectionsService],
 })
 export class RouteStopsModule {}

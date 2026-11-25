@@ -30,6 +30,7 @@ import { ProfileModule } from './modules/profile/profile.module';
 import { DriverAppModule } from './modules/driver-app/driver-app.module';
 import { DeviceTokensModule } from './modules/device-tokens/device-tokens.module';
 import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
+import { TripsModule } from './modules/trips/trips.module';
 import appConfig from './shared/config/app.config';
 import databaseConfig from './shared/config/database.config';
 import jwtConfig from './shared/config/jwt.config';
@@ -83,6 +84,7 @@ import firebaseConfig from './shared/config/firebase.config';
     DriverAppModule,
     DeviceTokensModule,
     PushNotificationsModule,
+    TripsModule,
   ],
 })
 export class AppModule {}
