@@ -6,4 +6,5 @@ export enum NotificationSourceType {
   DRIVER = 'DRIVER',
   STUDENT = 'STUDENT',
   GUARDIAN_MESSAGE = 'GUARDIAN_MESSAGE',
+  TRIP = 'TRIP',
 }

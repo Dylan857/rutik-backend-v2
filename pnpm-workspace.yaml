@@ -1,7 +1,9 @@
 allowBuilds:
+  '@firebase/util': set this to true or false
   "@nestjs/core": true
   "@scarf/scarf": true
   bcrypt: set this to true or false
+  protobufjs: set this to true or false
 onlyBuiltDependencies:
   - "@nestjs/core"
   - "@scarf/scarf"

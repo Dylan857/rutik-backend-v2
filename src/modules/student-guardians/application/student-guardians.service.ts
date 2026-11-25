@@ -137,6 +137,24 @@ export class StudentGuardianService {
     );
   }
 
+  /**
+   * User IDs of every guardian linked to a student (not just the primary
+   * one) that actually has a mobile-login User account. Used to target
+   * guardian-facing push notifications from the payments flow.
+   */
+  async findGuardianUserIdsForStudent(studentId: string): Promise<string[]> {
+    const relations = await this.studentGuardianRepository.findAll({ studentId });
+
+    const userIds = await Promise.all(
+      relations.map(async (relation) => {
+        const guardian = await this.guardianService.findById(relation.guardianId);
+        return guardian.userId;
+      }),
+    );
+
+    return [...new Set(userIds.filter((id): id is string => id !== null))];
+  }
+
   /** True when the guardian account linked to userId has an active relation to studentId. */
   async isGuardianOfStudent(userId: string, studentId: string): Promise<boolean> {
     const guardian = await this.guardianService.findByUserId(userId);

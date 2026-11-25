@@ -23,6 +23,11 @@ services:
       JWT_EXPIRATION: ${JWT_EXPIRATION:-1d}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-7d}
+      # Guardian push notifications — without these the backend starts with
+      # push silently disabled (see FirebaseMessagingService).
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

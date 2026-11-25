@@ -31,5 +31,7 @@ import { DriverAppController } from './infrastructure/api/controllers/driver-app
   ],
   controllers: [DriverAppController],
   providers: [DriverAppService],
+  // TripsModule builds a trip from the driver's verified daily route.
+  exports: [DriverAppService],
 })
 export class DriverAppModule {}
