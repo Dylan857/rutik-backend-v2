@@ -1,7 +1,7 @@
 # ─── Stage 1: Development ─────────────────────────────
 FROM node:20-alpine AS development
 
-RUN npm install -g pnpm
+RUN npm install -g pnpm@11.9.0
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ FROM node:20-alpine AS production
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 
-RUN npm install -g pnpm && apk add --no-cache tini
+RUN npm install -g pnpm@11.9.0 && apk add --no-cache tini
 
 WORKDIR /app
 
