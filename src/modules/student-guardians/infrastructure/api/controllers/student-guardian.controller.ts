@@ -29,15 +29,26 @@ import { plainToInstance } from 'class-transformer';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { StudentGuardianService } from '../../../application/student-guardians.service';
 import { RelationshipType } from '../../../domain/enums/relationship-type.enum';
 import { CreateStudentGuardianDto } from '../dto/create-student-guardian.dto';
 import { UpdateStudentGuardianDto } from '../dto/update-student-guardian.dto';
 import { StudentGuardianResponseDto } from '../dto/student-guardian-response.dto';
 import { MyStudentResponseDto } from '../dto/my-student-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Student Guardians')
 @Controller('student-guardians')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class StudentGuardianController {
   constructor(
     private readonly studentGuardianService: StudentGuardianService,
@@ -71,6 +82,8 @@ export class StudentGuardianController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List student-guardian relationships with optional filters',
   })
@@ -98,6 +111,7 @@ export class StudentGuardianController {
     description: 'Filter by primary status (true | false)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('studentId') studentId?: string,
     @Query('guardianId') guardianId?: string,
     @Query('relationshipType') relationshipType?: RelationshipType,
@@ -106,6 +120,7 @@ export class StudentGuardianController {
     const isPrimary =
       isPrimaryStr !== undefined ? isPrimaryStr === 'true' : undefined;
     const relations = await this.studentGuardianService.findAll({
+      companyId: resolveCompanyScope(currentUser),
       studentId,
       guardianId,
       relationshipType,
@@ -118,7 +133,7 @@ export class StudentGuardianController {
 
   // Must be declared before :id to avoid "me" being parsed as a UUID
   @Get('me')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'List the students linked to the currently authenticated guardian',
@@ -143,8 +158,14 @@ export class StudentGuardianController {
       tripType: entry.student.tripType,
       scheduleName: entry.scheduleName,
       pickupTime: entry.pickupTime,
+      dropoffTime: entry.dropoffTime,
       driverFirstName: entry.driverFirstName,
       driverLastName: entry.driverLastName,
+      driverPhone: entry.driverPhone,
+      vehiclePlate: entry.vehiclePlate,
+      vehicleDescription: entry.vehicleDescription,
+      stopOrder: entry.stopOrder,
+      stopOrderReturn: entry.stopOrderReturn,
     }));
     return plainToInstance(MyStudentResponseDto, flattened, {
       excludeExtraneousValues: true,
@@ -152,13 +173,17 @@ export class StudentGuardianController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a student-guardian relationship by ID' })
   @ApiOkResponse({ type: StudentGuardianResponseDto })
   @ApiNotFoundResponse({ description: 'Relationship not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StudentGuardianResponseDto> {
     const relation = await this.studentGuardianService.findById(id);
+    assertCompanyAccess(currentUser, relation.student?.companyId);
     return plainToInstance(StudentGuardianResponseDto, relation, {
       excludeExtraneousValues: true,
     });

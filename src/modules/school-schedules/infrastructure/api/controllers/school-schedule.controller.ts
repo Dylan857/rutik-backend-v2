@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -33,9 +37,16 @@ import { SchoolScheduleService } from '../../../application/school-schedules.ser
 import { CreateSchoolScheduleDto } from '../dto/create-school-schedule.dto';
 import { UpdateSchoolScheduleDto } from '../dto/update-school-schedule.dto';
 import { SchoolScheduleResponseDto } from '../dto/school-schedule-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('School Schedules')
 @Controller('school-schedules')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class SchoolScheduleController {
   constructor(private readonly scheduleService: SchoolScheduleService) {}
 
@@ -67,6 +78,8 @@ export class SchoolScheduleController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary:
       'List all active schedules, optionally filtered by company or school',
@@ -83,11 +96,12 @@ export class SchoolScheduleController {
     description: 'Filter by school UUID',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('schoolId') schoolId?: string,
   ): Promise<SchoolScheduleResponseDto[]> {
     const schedules = await this.scheduleService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       schoolId,
     });
     return plainToInstance(SchoolScheduleResponseDto, schedules, {
@@ -96,13 +110,17 @@ export class SchoolScheduleController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a school schedule by ID' })
   @ApiOkResponse({ type: SchoolScheduleResponseDto })
   @ApiNotFoundResponse({ description: 'School schedule not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<SchoolScheduleResponseDto> {
     const schedule = await this.scheduleService.findById(id);
+    assertCompanyAccess(currentUser, schedule.companyId);
     return plainToInstance(SchoolScheduleResponseDto, schedule, {
       excludeExtraneousValues: true,
     });

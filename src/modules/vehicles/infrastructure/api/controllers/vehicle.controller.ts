@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -37,9 +41,16 @@ import { CreateVehicleDto } from '../dto/create-vehicle.dto';
 import { UpdateVehicleDto } from '../dto/update-vehicle.dto';
 import { VehicleResponseDto } from '../dto/vehicle-response.dto';
 import { VehicleDetailResponseDto } from '../dto/vehicle-detail-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Vehicles')
 @Controller('vehicles')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class VehicleController {
   constructor(
     private readonly vehiclesService: VehiclesService,
@@ -78,6 +89,8 @@ export class VehicleController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List vehicles with optional filters' })
   @ApiOkResponse({ type: [VehicleResponseDto] })
   @ApiQuery({
@@ -103,13 +116,14 @@ export class VehicleController {
     description: 'Filter by status',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('plate') plate?: string,
     @Query('vehicleType') vehicleType?: VehicleType,
     @Query('status') status?: VehicleStatus,
   ): Promise<VehicleResponseDto[]> {
     const vehicles = await this.vehiclesService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       plate,
       vehicleType,
       status,
@@ -120,6 +134,8 @@ export class VehicleController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Get a vehicle by ID with its full detail',
     description:
@@ -141,6 +157,7 @@ export class VehicleController {
     description: 'Fuel period year. Defaults to the current year.',
   })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
@@ -150,6 +167,7 @@ export class VehicleController {
       month !== undefined ? Number(month) : undefined,
       year !== undefined ? Number(year) : undefined,
     );
+    assertCompanyAccess(currentUser, detail.vehicle.companyId);
 
     return plainToInstance(
       VehicleDetailResponseDto,

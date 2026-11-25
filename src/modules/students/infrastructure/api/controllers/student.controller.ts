@@ -25,6 +25,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -33,9 +37,16 @@ import { StudentStatus } from '../../../domain/enums/student-status.enum';
 import { CreateStudentDto } from '../dto/create-student.dto';
 import { UpdateStudentDto } from '../dto/update-student.dto';
 import { StudentResponseDto } from '../dto/student-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Students')
 @Controller('students')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class StudentController {
   constructor(private readonly studentService: StudentService) {}
 
@@ -67,6 +78,8 @@ export class StudentController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List students with optional filters' })
   @ApiOkResponse({ type: [StudentResponseDto] })
   @ApiQuery({
@@ -96,6 +109,7 @@ export class StudentController {
     description: 'Filter by grade (exact match)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('schoolId') schoolId?: string,
     @Query('scheduleId') scheduleId?: string,
@@ -103,7 +117,7 @@ export class StudentController {
     @Query('grade') grade?: string,
   ): Promise<StudentResponseDto[]> {
     const students = await this.studentService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       schoolId,
       scheduleId,
       status,
@@ -115,13 +129,17 @@ export class StudentController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a student by ID' })
   @ApiOkResponse({ type: StudentResponseDto })
   @ApiNotFoundResponse({ description: 'Student not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StudentResponseDto> {
     const student = await this.studentService.findById(id);
+    assertCompanyAccess(currentUser, student.companyId);
     return plainToInstance(StudentResponseDto, student, {
       excludeExtraneousValues: true,
     });

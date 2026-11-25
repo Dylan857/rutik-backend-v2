@@ -93,6 +93,11 @@ export class DriverService {
     return driver;
   }
 
+  /** The driver profile of a DRIVER-role user (null if it has none). */
+  async findByUserId(userId: string): Promise<Driver | null> {
+    return this.driverRepository.findByUserId(userId);
+  }
+
   async update(
     id: string,
     dto: UpdateDriverDto,

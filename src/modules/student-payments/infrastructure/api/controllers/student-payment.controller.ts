@@ -31,6 +31,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
@@ -50,6 +54,10 @@ import { PaymentsSummaryResponseDto } from '../dto/payments-summary-response.dto
 
 @ApiTags('Student Payments')
 @Controller('student-payments')
+// Admin by default; the parents' app gets explicit per-method access below
+// (its own children's payments only).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class StudentPaymentController {
   constructor(private readonly paymentsService: StudentPaymentsService) {}
 
@@ -123,9 +131,12 @@ export class StudentPaymentController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'List payment records with optional filters' })
+  @ApiOperation({
+    summary: 'List payment records with optional filters',
+    description: 'A GUARDIAN must send studentId, and only for one of their children.',
+  })
   @ApiOkResponse({ type: [StudentPaymentResponseDto] })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   @ApiQuery({
@@ -155,14 +166,22 @@ export class StudentPaymentController {
     description: 'Filter by payment status',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('studentId') studentId?: string,
     @Query('billingMonth') billingMonth?: string,
     @Query('billingYear') billingYear?: string,
     @Query('status') status?: PaymentStatus,
   ): Promise<StudentPaymentResponseDto[]> {
+    if (currentUser.role === UserRole.GUARDIAN) {
+      if (!studentId) {
+        throw new BadRequestException('studentId is required');
+      }
+      await this.paymentsService.assertGuardianOf(currentUser.sub, studentId);
+    }
+
     const payments = await this.paymentsService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       studentId,
       billingMonth: billingMonth ? parseInt(billingMonth, 10) : undefined,
       billingYear: billingYear ? parseInt(billingYear, 10) : undefined,
@@ -259,16 +278,21 @@ export class StudentPaymentController {
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.GUARDIAN)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a payment record by ID' })
   @ApiOkResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<StudentPaymentResponseDto> {
     const payment = await this.paymentsService.findById(id);
+    assertCompanyAccess(currentUser, payment.companyId);
+    if (currentUser.role === UserRole.GUARDIAN) {
+      await this.paymentsService.assertGuardianOf(currentUser.sub, payment.studentId);
+    }
     return plainToInstance(StudentPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });
@@ -276,7 +300,7 @@ export class StudentPaymentController {
 
   @Post(':id/receipts')
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard)
+  @Roles(UserRole.GUARDIAN)
   @UseInterceptors(FileInterceptor('file'))
   @ApiBearerAuth('access-token')
   @ApiConsumes('multipart/form-data')
@@ -289,7 +313,9 @@ export class StudentPaymentController {
   })
   @ApiCreatedResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
-  @ApiConflictResponse({ description: 'Period already paid or already in review' })
+  @ApiConflictResponse({
+    description: 'Period already paid or already in review',
+  })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async submitReceipt(
     @Param('id', ParseUUIDPipe) id: string,
@@ -298,7 +324,9 @@ export class StudentPaymentController {
     @CurrentUser() currentUser: JwtPayload,
   ): Promise<StudentPaymentResponseDto> {
     if (!file) {
-      throw new BadRequestException('A receipt photo (field "file") is required');
+      throw new BadRequestException(
+        'A receipt photo (field "file") is required',
+      );
     }
     const payment = await this.paymentsService.submitReceipt(id, dto, file, {
       userId: currentUser.sub,
@@ -317,7 +345,9 @@ export class StudentPaymentController {
   @ApiOperation({ summary: 'Admin approves a receipt currently under review' })
   @ApiOkResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
-  @ApiConflictResponse({ description: 'No receipt is currently awaiting review' })
+  @ApiConflictResponse({
+    description: 'No receipt is currently awaiting review',
+  })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async approve(
     @Param('id', ParseUUIDPipe) id: string,
@@ -341,7 +371,9 @@ export class StudentPaymentController {
   @ApiOperation({ summary: 'Admin rejects a receipt currently under review' })
   @ApiOkResponse({ type: StudentPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
-  @ApiConflictResponse({ description: 'No receipt is currently awaiting review' })
+  @ApiConflictResponse({
+    description: 'No receipt is currently awaiting review',
+  })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async reject(
     @Param('id', ParseUUIDPipe) id: string,

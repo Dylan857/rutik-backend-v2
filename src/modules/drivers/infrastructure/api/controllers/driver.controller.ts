@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
@@ -35,9 +39,16 @@ import { PaymentType } from '../../../domain/enums/payment-type.enum';
 import { CreateDriverDto } from '../dto/create-driver.dto';
 import { UpdateDriverDto } from '../dto/update-driver.dto';
 import { DriverResponseDto } from '../dto/driver-response.dto';
+import { RolesGuard } from '../../../../../common/guards/roles.guard';
+import { Roles } from '../../../../../common/decorators/roles.decorator';
+import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 
 @ApiTags('Drivers')
 @Controller('drivers')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class DriverController {
   constructor(private readonly driverService: DriverService) {}
 
@@ -73,6 +84,8 @@ export class DriverController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List drivers with optional filters' })
   @ApiOkResponse({ type: [DriverResponseDto] })
   @ApiQuery({
@@ -93,12 +106,13 @@ export class DriverController {
     description: 'Filter by payment type',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('status') status?: DriverStatus,
     @Query('paymentType') paymentType?: PaymentType,
   ): Promise<DriverResponseDto[]> {
     const drivers = await this.driverService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       status,
       paymentType,
     });
@@ -108,13 +122,17 @@ export class DriverController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a driver by ID' })
   @ApiOkResponse({ type: DriverResponseDto })
   @ApiNotFoundResponse({ description: 'Driver not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<DriverResponseDto> {
     const driver = await this.driverService.findById(id);
+    assertCompanyAccess(currentUser, driver.companyId);
     return plainToInstance(DriverResponseDto, driver, {
       excludeExtraneousValues: true,
     });

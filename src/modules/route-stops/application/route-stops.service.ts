@@ -73,8 +73,14 @@ export class RouteStopsService {
     return stop;
   }
 
-  async findByRouteId(routeId: string): Promise<RouteStop[]> {
-    return this.routeStopRepository.findAll({ schoolRouteId: routeId });
+  async findByRouteId(
+    routeId: string,
+    companyId?: string,
+  ): Promise<RouteStop[]> {
+    return this.routeStopRepository.findAll({
+      schoolRouteId: routeId,
+      companyId,
+    });
   }
 
   // ── Public domain methods (consumed by StudentService, NOT by controllers) ──

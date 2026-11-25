@@ -30,6 +30,7 @@ import { Roles } from '../../../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../../../common/guards/roles.guard';
 import { JwtPayload } from '../../../../../common/interfaces/jwt-payload.interface';
+import { assertCompanyAccess } from '../../../../../common/utils/company-scope';
 import { UserRole } from '../../../../user/domain/enums/user-role.enum';
 import { PaymentAccountsService } from '../../../application/payment-accounts.service';
 import { CreatePaymentAccountDto } from '../dto/create-payment-account.dto';
@@ -47,7 +48,10 @@ export class PaymentAccountController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Add a payment account (Nequi/Daviplata/bank) guardians can transfer to' })
+  @ApiOperation({
+    summary:
+      'Add a payment account (Nequi/Daviplata/bank) guardians can transfer to',
+  })
   @ApiCreatedResponse({ type: PaymentAccountResponseDto })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async create(
@@ -80,13 +84,18 @@ export class PaymentAccountController {
     if (!companyId) {
       throw new BadRequestException('companyId is required');
     }
+    assertCompanyAccess(currentUser, companyId);
 
     const isCompanyAdmin =
-      (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUPER_ADMIN) &&
+      (currentUser.role === UserRole.ADMIN ||
+        currentUser.role === UserRole.SUPER_ADMIN) &&
       currentUser.companyId === companyId;
     const isSuperAdmin = currentUser.role === UserRole.SUPER_ADMIN;
 
-    const accounts = await this.service.findAll(companyId, !(isCompanyAdmin || isSuperAdmin));
+    const accounts = await this.service.findAll(
+      companyId,
+      !(isCompanyAdmin || isSuperAdmin),
+    );
     return plainToInstance(PaymentAccountResponseDto, accounts, {
       excludeExtraneousValues: true,
     });

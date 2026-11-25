@@ -26,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { plainToInstance } from 'class-transformer';
+import {
+  assertCompanyAccess,
+  resolveCompanyScope,
+} from '../../../../../common/utils/company-scope';
 import { CurrentUser } from '../../../../../common/decorators/current-user.decorator';
 import { Roles } from '../../../../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../../../../common/guards/jwt-auth.guard';
@@ -41,6 +45,10 @@ import { GenerateDriverPaymentCycleResponseDto } from '../dto/payment-cycle-resp
 
 @ApiTags('Driver Payments')
 @Controller('driver-payments')
+// Admin panel only — guardians and drivers use their own scoped
+// endpoints (/student-guardians/me, /student-absences, /driver, /me).
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
 export class DriverPaymentController {
   constructor(private readonly paymentsService: DriverPaymentsService) {}
 
@@ -114,6 +122,8 @@ export class DriverPaymentController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List payment records with optional filters' })
   @ApiOkResponse({ type: [DriverPaymentResponseDto] })
   @ApiQuery({
@@ -144,6 +154,7 @@ export class DriverPaymentController {
     description: 'Exact-match filter on periodEnd (YYYY-MM-DD)',
   })
   async findAll(
+    @CurrentUser() currentUser: JwtPayload,
     @Query('companyId') companyId?: string,
     @Query('driverId') driverId?: string,
     @Query('status') status?: DriverPaymentStatus,
@@ -151,7 +162,7 @@ export class DriverPaymentController {
     @Query('periodEnd') periodEnd?: string,
   ): Promise<DriverPaymentResponseDto[]> {
     const payments = await this.paymentsService.findAll({
-      companyId,
+      companyId: resolveCompanyScope(currentUser, companyId),
       driverId,
       status,
       periodStart,
@@ -163,13 +174,17 @@ export class DriverPaymentController {
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get a payment record by ID' })
   @ApiOkResponse({ type: DriverPaymentResponseDto })
   @ApiNotFoundResponse({ description: 'Payment record not found' })
   async findById(
+    @CurrentUser() currentUser: JwtPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<DriverPaymentResponseDto> {
     const payment = await this.paymentsService.findById(id);
+    assertCompanyAccess(currentUser, payment.companyId);
     return plainToInstance(DriverPaymentResponseDto, payment, {
       excludeExtraneousValues: true,
     });

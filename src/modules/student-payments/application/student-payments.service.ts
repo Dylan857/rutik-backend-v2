@@ -179,6 +179,19 @@ export class StudentPaymentsService {
     return payments.map((p) => this.attachComputed(p, this.recompute(p)));
   }
 
+  /** Guardians may only read their own children's payments. */
+  async assertGuardianOf(userId: string, studentId: string): Promise<void> {
+    const isGuardian = await this.studentGuardianService.isGuardianOfStudent(
+      userId,
+      studentId,
+    );
+    if (!isGuardian) {
+      throw new ForbiddenException(
+        'You are not a guardian of the student this payment belongs to',
+      );
+    }
+  }
+
   async findById(id: string): Promise<StudentPayment> {
     const payment = await this.paymentRepository.findById(id);
     if (!payment) {

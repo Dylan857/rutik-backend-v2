@@ -10,6 +10,7 @@ import { GuardianService } from '../../guardians/application/guardians.service';
 import { SchoolScheduleService } from '../../school-schedules/application/school-schedules.service';
 import { SchoolAssignmentsService } from '../../school-assignments/application/school-assignments.service';
 import { AssignmentStatus } from '../../school-assignments/domain/enums/assignment-status.enum';
+import { RouteStopsService } from '../../route-stops/application/route-stops.service';
 import { Student } from '../../students/domain/student.entity';
 import { AuditLogsService } from '../../audit-logs/application/audit-logs.service';
 import { AuditAction } from '../../audit-logs/domain/enums/audit-action.enum';
@@ -34,6 +35,7 @@ export class StudentGuardianService {
     private readonly scheduleService: SchoolScheduleService,
     private readonly schoolAssignmentsService: SchoolAssignmentsService,
     private readonly auditLogsService: AuditLogsService,
+    private readonly routeStopsService: RouteStopsService,
   ) {}
 
   async create(
@@ -110,13 +112,26 @@ export class StudentGuardianService {
           status: AssignmentStatus.ACTIVE,
         });
 
+        const [stop] = await this.routeStopsService.findAll({
+          studentId: student.id,
+        });
+        const vehicle = assignment?.vehicle;
+
         return {
           relation,
           student,
           scheduleName: schedule.name,
           pickupTime: assignment ? schedule.startTime : null,
+          dropoffTime: assignment ? schedule.endTime : null,
           driverFirstName: assignment?.driver?.firstName ?? null,
           driverLastName: assignment?.driver?.lastName ?? null,
+          driverPhone: assignment?.driver?.phone ?? null,
+          vehiclePlate: vehicle?.plate ?? null,
+          vehicleDescription: vehicle
+            ? `${vehicle.brand} ${vehicle.model} ${vehicle.color}`.trim()
+            : null,
+          stopOrder: stop?.stopOrder ?? null,
+          stopOrderReturn: stop?.stopOrderReturn ?? null,
         };
       }),
     );
@@ -200,6 +215,14 @@ export interface MyStudentEntry {
   scheduleName: string;
   /** Schedule start time (e.g. "06:35:00"), null if no active assignment yet. */
   pickupTime: string | null;
+  /** Schedule end time, null if no active assignment yet. */
+  dropoffTime: string | null;
   driverFirstName: string | null;
   driverLastName: string | null;
+  driverPhone: string | null;
+  vehiclePlate: string | null;
+  vehicleDescription: string | null;
+  /** The student's stop number on the base route (ida / regreso), if routed. */
+  stopOrder: number | null;
+  stopOrderReturn: number | null;
 }

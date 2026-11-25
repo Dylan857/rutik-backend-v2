@@ -45,7 +45,8 @@ export class DailyRouteController {
   ) {}
 
   @Get(':routeId/daily')
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN, UserRole.DRIVER)
+  // Drivers read their own routes' daily plan through GET /driver/routes/:id/daily.
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: "A route's plan for one day",
     description:
