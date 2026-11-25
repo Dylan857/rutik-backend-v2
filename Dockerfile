@@ -1,5 +1,5 @@
 # ─── Stage 1: Development ─────────────────────────────
-FROM node:20-alpine AS development
+FROM node:22-alpine AS development
 
 RUN npm install -g pnpm@11.9.0
 
@@ -16,7 +16,7 @@ FROM development AS builder
 RUN pnpm run build
 
 # ─── Stage 3: Production ──────────────────────────────
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
